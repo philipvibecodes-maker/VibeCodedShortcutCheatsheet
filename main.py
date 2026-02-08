@@ -1,0 +1,16 @@
+import sys
+
+from PyQt6.QtWidgets import QApplication
+
+from src.cheatsheet.cheatsheet_window import CheatsheetWindow
+
+
+def main():
+    app = QApplication(sys.argv)
+    window = CheatsheetWindow()
+    window.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
