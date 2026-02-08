@@ -1,0 +1,10 @@
+{
+  "app_name": "gnome-terminal-server",
+  "display_name": "Gnome Terminal",
+  "shortcuts": [
+    {
+      "keys": "Ctrl+Shift+C",
+      "description": "Copy"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "app_name": "dev.zed.Zed",
+  "display_name": "Zed",
+  "shortcuts": [
+    {
+      "keys": "Ctrl+P",
+      "description": "Open file picker"
+    },
+    {
+      "keys": "Ctrl+Shift+P",
+      "description": "Open command palette"
+    },
+    {
+      "keys": "Ctrl+/",
+      "description": "Toggle line comment"
+    },
+    {
+      "keys": "Ctrl+B",
+      "description": "Toggle sidebar"
+    },
+    {
+      "keys": "Ctrl+`",
+      "description": "Toggle terminal"
+    }
+  ]
+}

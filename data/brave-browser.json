@@ -1,0 +1,18 @@
+{
+  "app_name": "brave-browser",
+  "display_name": "Brave Browser",
+  "shortcuts": [
+    {
+      "keys": "Ctrl+T",
+      "description": "New tab"
+    },
+    {
+      "keys": "Ctrl+W",
+      "description": "Close tab"
+    },
+    {
+      "keys": "Ctrl+Shift+T",
+      "description": "Reopen closed tab"
+    }
+  ]
+}
