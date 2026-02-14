@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import QGridLayout, QLabel, QMainWindow, QVBoxLayout, QWidg
 from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, save_font_size
 from src.platform.window_detection import get_focused_window
 from src.platform.window_movement import get_window_details, get_window_id_by_title, get_work_area, move_window
+from src.settings.settings_window import SettingsWindow
 
 DARK_THEME = """
     QMainWindow {
@@ -25,6 +26,7 @@ class CheatsheetWindow(QMainWindow):
         self._corner_h = "right"
         self._initial_move_done = False
         self._font_size = get_font_size()
+        self._settings_window = None
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -57,8 +59,11 @@ class CheatsheetWindow(QMainWindow):
         if not focused:
             return
 
-        # Skip update when the cheatsheet itself is focused
-        if focused.get("title") == self.windowTitle():
+        # Skip update when any of our own windows are focused
+        our_titles = {self.windowTitle()}
+        if self._settings_window:
+            our_titles.add(self._settings_window.windowTitle())
+        if focused.get("title") in our_titles:
             return
 
         focused_app = focused.get("wm_class")
@@ -134,6 +139,8 @@ class CheatsheetWindow(QMainWindow):
         elif key == Qt.Key.Key_Right:
             self._corner_h = "right"
             self._move_to_corner()
+        elif key == Qt.Key.Key_S and not ctrl:
+            self._open_settings()
         else:
             super().keyPressEvent(event)
 
@@ -156,6 +163,15 @@ class CheatsheetWindow(QMainWindow):
         self.setMinimumSize(0, 0)
         self.setMaximumSize(16777215, 16777215)
         QTimer.singleShot(50, self._move_to_corner)
+
+    def _open_settings(self):
+        if self._settings_window and self._settings_window.isVisible():
+            self._settings_window.raise_()
+            self._settings_window.activateWindow()
+            return
+
+        self._settings_window = SettingsWindow(app_name=self._current_app or "default")
+        self._settings_window.show()
 
     def _move_to_corner(self):
         try:

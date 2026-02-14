@@ -125,6 +125,32 @@ def save_font_size(size: int) -> None:
         json.dump(config, f, indent=2)
 
 
+def save_app_shortcuts(app_name: str, shortcuts: List[Dict[str, str]]) -> None:
+    """
+    Save shortcuts for a specific application.
+
+    Args:
+        app_name: The application name (e.g., 'brave-browser')
+        shortcuts: List of shortcut dicts with 'keys' and 'description' keys.
+    """
+    data_dir = get_data_dir()
+    json_file = data_dir / f"{app_name}.json"
+
+    # Load existing data to preserve display_name
+    existing = get_app_shortcuts(app_name)
+    display_name = existing["display_name"] if existing else app_name
+
+    data = {
+        "app_name": app_name,
+        "display_name": display_name,
+        "shortcuts": shortcuts,
+    }
+
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with open(json_file, 'w') as f:
+        json.dump(data, f, indent=2)
+
+
 def get_default_shortcuts() -> Optional[Dict]:
     """
     Get the default Ubuntu shortcuts.
