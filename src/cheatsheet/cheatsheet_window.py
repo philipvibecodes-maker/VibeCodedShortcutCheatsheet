@@ -2,7 +2,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QGridLayout, QLabel, QMainWindow, QVBoxLayout, QWidget
 
 from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, save_font_size
-from src.platform.window_detection import get_focused_app_name
+from src.platform.window_detection import get_focused_window
 from src.platform.window_movement import get_window_details, get_window_id_by_title, get_work_area, move_window
 
 DARK_THEME = """
@@ -50,10 +50,18 @@ class CheatsheetWindow(QMainWindow):
 
     def _on_poll(self):
         try:
-            focused_app = get_focused_app_name()
+            focused = get_focused_window()
         except Exception:
             return
 
+        if not focused:
+            return
+
+        # Skip update when the cheatsheet itself is focused
+        if focused.get("title") == self.windowTitle():
+            return
+
+        focused_app = focused.get("wm_class")
         if focused_app == self._current_app:
             return
 
