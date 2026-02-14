@@ -91,6 +91,40 @@ def get_all_app_names() -> List[str]:
     return list(all_shortcuts.keys())
 
 
+def _get_config_path() -> Path:
+    """Return the path to the config.json file."""
+    return get_data_dir() / "config.json"
+
+
+def get_font_size() -> int:
+    """Get the stored font size, defaulting to 12."""
+    config_path = _get_config_path()
+    if config_path.exists():
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+                return config.get("font_size", 12)
+        except (json.JSONDecodeError, IOError):
+            pass
+    return 12
+
+
+def save_font_size(size: int) -> None:
+    """Save font size to config.json, preserving other config values."""
+    config_path = _get_config_path()
+    config = {}
+    if config_path.exists():
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+    config["font_size"] = size
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=2)
+
+
 def get_default_shortcuts() -> Optional[Dict]:
     """
     Get the default Ubuntu shortcuts.

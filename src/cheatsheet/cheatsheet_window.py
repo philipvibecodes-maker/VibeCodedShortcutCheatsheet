@@ -1,7 +1,7 @@
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QGridLayout, QLabel, QMainWindow, QVBoxLayout, QWidget
 
-from src.data_storage import get_app_shortcuts, get_default_shortcuts
+from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, save_font_size
 from src.platform.window_detection import get_focused_app_name
 from src.platform.window_movement import get_window_details, get_window_id_by_title, get_work_area, move_window
 
@@ -24,6 +24,7 @@ class CheatsheetWindow(QMainWindow):
         self._corner_v = "top"
         self._corner_h = "right"
         self._initial_move_done = False
+        self._font_size = get_font_size()
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -31,7 +32,7 @@ class CheatsheetWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.app_label = QLabel()
-        self.app_label.setStyleSheet("font-size: 14pt; padding-bottom: 4px;")
+        self.app_label.setStyleSheet(f"font-size: {self._font_size + 2}pt; padding-bottom: 4px;")
         self.app_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.app_label)
 
@@ -83,10 +84,10 @@ class CheatsheetWindow(QMainWindow):
 
         for row, shortcut in enumerate(data["shortcuts"]):
             desc_label = QLabel(shortcut["description"])
-            desc_label.setStyleSheet("padding: 2px 4px;")
+            desc_label.setStyleSheet(f"font-size: {self._font_size}pt; padding: 2px 4px;")
 
             keys_label = QLabel(shortcut["keys"])
-            keys_label.setStyleSheet("padding: 2px 4px;")
+            keys_label.setStyleSheet(f"font-size: {self._font_size}pt; padding: 2px 4px;")
             keys_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
             self.grid_layout.addWidget(desc_label, row, 0)
@@ -96,6 +97,7 @@ class CheatsheetWindow(QMainWindow):
         self.setFixedSize(self.sizeHint())
         self.setMinimumSize(0, 0)
         self.setMaximumSize(16777215, 16777215)
+        QTimer.singleShot(50, self._move_to_corner)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -105,7 +107,14 @@ class CheatsheetWindow(QMainWindow):
 
     def keyPressEvent(self, event):
         key = event.key()
-        if key == Qt.Key.Key_Up:
+        modifiers = event.modifiers()
+        ctrl = modifiers & Qt.KeyboardModifier.ControlModifier
+
+        if ctrl and key in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+            self._change_font_size(1)
+        elif ctrl and key == Qt.Key.Key_Minus:
+            self._change_font_size(-1)
+        elif key == Qt.Key.Key_Up:
             self._corner_v = "top"
             self._move_to_corner()
         elif key == Qt.Key.Key_Down:
@@ -119,6 +128,26 @@ class CheatsheetWindow(QMainWindow):
             self._move_to_corner()
         else:
             super().keyPressEvent(event)
+
+    def _change_font_size(self, delta):
+        new_size = self._font_size + delta
+        if new_size < 8 or new_size > 24:
+            return
+        self._font_size = new_size
+        save_font_size(new_size)
+        self._apply_font_size()
+
+    def _apply_font_size(self):
+        self.app_label.setStyleSheet(f"font-size: {self._font_size + 2}pt; padding-bottom: 4px;")
+        for i in range(self.grid_layout.count()):
+            widget = self.grid_layout.itemAt(i).widget()
+            if widget:
+                widget.setStyleSheet(f"font-size: {self._font_size}pt; padding: 2px 4px;")
+        self._main_layout.activate()
+        self.setFixedSize(self.sizeHint())
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(16777215, 16777215)
+        QTimer.singleShot(50, self._move_to_corner)
 
     def _move_to_corner(self):
         try:
