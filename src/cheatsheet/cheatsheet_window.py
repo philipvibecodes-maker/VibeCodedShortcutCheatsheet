@@ -44,7 +44,18 @@ class CheatsheetWindow(QMainWindow):
         self._main_layout = layout
         layout.addWidget(self.grid_widget)
 
-        self._display_shortcuts(get_default_shortcuts())
+        # Detect the currently focused app before our window takes focus
+        data = None
+        try:
+            focused = get_focused_window()
+            if focused:
+                app_name = focused.get("wm_class")
+                if app_name:
+                    self._current_app = app_name
+                    data = get_app_shortcuts(app_name)
+        except Exception:
+            pass
+        self._display_shortcuts(data or get_default_shortcuts())
 
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._on_poll)
