@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QMainWindow,
+    QMenu,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -12,6 +13,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.data_storage import get_all_shortcuts, get_app_shortcuts, save_app_shortcuts
+from src.platform.window_detection import get_open_app_names
 
 DARK_THEME = """
     QMainWindow {
@@ -81,10 +83,17 @@ class SettingsWindow(QMainWindow):
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
 
+        app_row = QHBoxLayout()
         self.app_combo = QComboBox()
         self._populate_app_combo()
         self.app_combo.currentIndexChanged.connect(self._on_app_changed)
-        layout.addWidget(self.app_combo)
+        app_row.addWidget(self.app_combo, 1)
+
+        self.add_app_btn = QPushButton("Add a&pp")
+        self.add_app_btn.clicked.connect(self._show_add_app_menu)
+        app_row.addWidget(self.add_app_btn)
+
+        layout.addLayout(app_row)
 
         self.table = QTableWidget()
         self.table.setColumnCount(3)
@@ -117,6 +126,40 @@ class SettingsWindow(QMainWindow):
             if index >= 0:
                 self.app_combo.setCurrentIndex(index)
             self._load_shortcuts(app_name)
+
+    def _show_add_app_menu(self):
+        existing_apps = set(get_all_shortcuts().keys())
+        running_apps = sorted(set(get_open_app_names()) - existing_apps)
+
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #333;
+                color: #e0e0e0;
+            }
+            QMenu::item:selected {
+                background-color: #444;
+            }
+        """)
+
+        if not running_apps:
+            action = menu.addAction("No new applications found")
+            action.setEnabled(False)
+        else:
+            for app_name in running_apps:
+                menu.addAction(app_name)
+
+        action = menu.exec(self.add_app_btn.mapToGlobal(
+            self.add_app_btn.rect().bottomLeft()
+        ))
+        if action and action.isEnabled():
+            self._add_app(action.text())
+
+    def _add_app(self, app_name):
+        save_app_shortcuts(app_name, [])
+        self.app_combo.addItem(app_name, app_name)
+        index = self.app_combo.findData(app_name)
+        self.app_combo.setCurrentIndex(index)
 
     def _populate_app_combo(self):
         all_shortcuts = get_all_shortcuts()
