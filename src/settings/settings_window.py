@@ -95,6 +95,10 @@ class SettingsWindow(QMainWindow):
         self.table.verticalHeader().setVisible(False)
         layout.addWidget(self.table)
 
+        self.add_shortcut_btn = QPushButton("&Add shortcut")
+        self.add_shortcut_btn.clicked.connect(self._add_shortcut)
+        layout.addWidget(self.add_shortcut_btn)
+
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
@@ -146,6 +150,14 @@ class SettingsWindow(QMainWindow):
         btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         btn.clicked.connect(lambda checked, r=row: self._delete_row(r))
         self.table.setCellWidget(row, 2, btn)
+
+    def _add_shortcut(self):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        self.table.setItem(row, 0, QTableWidgetItem(""))
+        self.table.setItem(row, 1, QTableWidgetItem(""))
+        self._add_delete_button(row)
+        self.table.editItem(self.table.item(row, 0))
 
     def _delete_row(self, row):
         self.table.removeRow(row)
