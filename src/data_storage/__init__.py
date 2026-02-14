@@ -151,6 +151,23 @@ def save_app_shortcuts(app_name: str, shortcuts: List[Dict[str, str]]) -> None:
         json.dump(data, f, indent=2)
 
 
+def delete_app_shortcuts(app_name: str) -> bool:
+    """
+    Delete the shortcut profile for a specific application.
+
+    Args:
+        app_name: The application name (e.g., 'brave-browser')
+
+    Returns:
+        True if the file was deleted, False if it didn't exist.
+    """
+    json_file = get_data_dir() / f"{app_name}.json"
+    if json_file.exists():
+        json_file.unlink()
+        return True
+    return False
+
+
 def get_default_shortcuts() -> Optional[Dict]:
     """
     Get the default Ubuntu shortcuts.

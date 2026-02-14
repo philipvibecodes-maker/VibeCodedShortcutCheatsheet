@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QMainWindow,
     QMenu,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -12,7 +13,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.data_storage import get_all_shortcuts, get_app_shortcuts, save_app_shortcuts
+from src.data_storage import delete_app_shortcuts, get_all_shortcuts, get_app_shortcuts, save_app_shortcuts
 from src.platform.window_detection import get_open_app_names
 
 DARK_THEME = """
@@ -93,6 +94,10 @@ class SettingsWindow(QMainWindow):
         self.add_app_btn.clicked.connect(self._show_add_app_menu)
         app_row.addWidget(self.add_app_btn)
 
+        self.delete_app_btn = QPushButton("&Delete app")
+        self.delete_app_btn.clicked.connect(self._delete_app)
+        app_row.addWidget(self.delete_app_btn)
+
         layout.addLayout(app_row)
 
         self.table = QTableWidget()
@@ -160,6 +165,29 @@ class SettingsWindow(QMainWindow):
         self.app_combo.addItem(app_name, app_name)
         index = self.app_combo.findData(app_name)
         self.app_combo.setCurrentIndex(index)
+
+    def _delete_app(self):
+        if not self._app_name:
+            return
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Delete Application")
+        msg.setText(f"Delete all shortcuts for {self.app_combo.currentText()}?")
+        msg.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        msg.setDefaultButton(QMessageBox.StandardButton.No)
+        if msg.exec() != QMessageBox.StandardButton.Yes:
+            return
+
+        delete_app_shortcuts(self._app_name)
+        index = self.app_combo.currentIndex()
+        self.app_combo.removeItem(index)
+        if self.app_combo.count() > 0:
+            self.app_combo.setCurrentIndex(0)
+        else:
+            self._app_name = None
+            self.table.setRowCount(0)
 
     def _populate_app_combo(self):
         all_shortcuts = get_all_shortcuts()

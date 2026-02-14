@@ -1,5 +1,5 @@
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QGridLayout, QLabel, QMainWindow, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QGridLayout, QLabel, QMainWindow, QVBoxLayout, QWidget
 
 from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, save_font_size
 from src.platform.window_detection import get_focused_window
@@ -70,7 +70,9 @@ class CheatsheetWindow(QMainWindow):
         if not focused:
             return
 
-        # Skip update when any of our own windows are focused
+        # Skip update when any of our own windows or dialogs are focused
+        if QApplication.activeModalWidget():
+            return
         our_titles = {self.windowTitle()}
         if self._settings_window:
             our_titles.add(self._settings_window.windowTitle())
