@@ -1,4 +1,4 @@
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -13,8 +13,106 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+
 from src.data_storage import delete_app_shortcuts, get_all_shortcuts, get_app_shortcuts, save_app_shortcuts
 from src.platform.window_detection import get_open_app_names
+
+
+class ShortcutTable(QTableWidget):
+    """QTableWidget that allows Tab/Shift+Tab to leave the table at cell boundaries."""
+
+    tab_next_widget = None
+    tab_prev_widget = None
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        if self.rowCount() == 0:
+            return
+        if event.reason() == Qt.FocusReason.TabFocusReason:
+            self.setCurrentCell(0, 0)
+        elif event.reason() == Qt.FocusReason.BacktabFocusReason:
+            last_row = self.rowCount() - 1
+            last_col = self.columnCount() - 1
+            self.setCurrentCell(last_row, last_col)
+            w = self.cellWidget(last_row, last_col)
+            if w:
+                w.setFocus()
+
+    def keyPressEvent(self, event):
+        forward = self._tab_direction(event)
+        if forward is not None and self._at_boundary(forward):
+            self._focus_outside(forward)
+            return
+        super().keyPressEvent(event)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress:
+            forward = self._tab_direction(event)
+            if forward is not None:
+                row, col = self._find_cell_widget(obj)
+                if row is not None:
+                    if self._at_boundary_cell(row, col, forward):
+                        self._focus_outside(forward)
+                        return True
+                    next_row, next_col = self._next_cell(row, col, forward)
+                    self.setCurrentCell(next_row, next_col)
+                    w = self.cellWidget(next_row, next_col)
+                    if w:
+                        w.setFocus()
+                    else:
+                        self.setFocus()
+                    return True
+        return super().eventFilter(obj, event)
+
+    def _focus_outside(self, forward):
+        self.setCurrentCell(-1, -1)
+        target = self.tab_next_widget if forward else self.tab_prev_widget
+        if target:
+            target.setFocus()
+        else:
+            QWidget.focusNextPrevChild(self, forward)
+
+    def _tab_direction(self, event):
+        if event.key() == Qt.Key.Key_Backtab:
+            return False
+        if event.key() == Qt.Key.Key_Tab:
+            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                return False
+            return True
+        return None
+
+    def _at_boundary(self, forward):
+        if self.rowCount() == 0:
+            return True
+        row, col = self.currentRow(), self.currentColumn()
+        if row < 0 or col < 0:
+            return False
+        return self._at_boundary_cell(row, col, forward)
+
+    def _at_boundary_cell(self, row, col, forward):
+        if forward:
+            return row == self.rowCount() - 1 and col == self.columnCount() - 1
+        return row == 0 and col == 0
+
+    def _next_cell(self, row, col, forward):
+        if forward:
+            col += 1
+            if col >= self.columnCount():
+                col = 0
+                row += 1
+        else:
+            col -= 1
+            if col < 0:
+                col = self.columnCount() - 1
+                row -= 1
+        return row, col
+
+    def _find_cell_widget(self, widget):
+        for row in range(self.rowCount()):
+            for col in range(self.columnCount()):
+                if self.cellWidget(row, col) is widget:
+                    return row, col
+        return None, None
 
 DARK_THEME = """
     QMainWindow {
@@ -100,7 +198,7 @@ class SettingsWindow(QMainWindow):
 
         layout.addLayout(app_row)
 
-        self.table = QTableWidget()
+        self.table = ShortcutTable()
         self.table.setColumnCount(3)
         self.table.setHorizontalHeaderLabels(["Action", "Shortcut", ""])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -126,11 +224,33 @@ class SettingsWindow(QMainWindow):
 
         layout.addLayout(button_layout)
 
+        self.table.tab_next_widget = self.add_shortcut_btn
+        self.table.tab_prev_widget = self.delete_app_btn
+
+        QWidget.setTabOrder(self.app_combo, self.add_app_btn)
+        QWidget.setTabOrder(self.add_app_btn, self.delete_app_btn)
+        QWidget.setTabOrder(self.delete_app_btn, self.table)
+        QWidget.setTabOrder(self.table, self.add_shortcut_btn)
+        QWidget.setTabOrder(self.add_shortcut_btn, self.cancel_btn)
+        QWidget.setTabOrder(self.cancel_btn, self.save_btn)
+        self.save_btn.installEventFilter(self)
+        self.app_combo.installEventFilter(self)
+
         if app_name:
             index = self.app_combo.findData(app_name)
             if index >= 0:
                 self.app_combo.setCurrentIndex(index)
             self._load_shortcuts(app_name)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress:
+            if obj is self.save_btn and event.key() == Qt.Key.Key_Tab and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+                self.app_combo.setFocus()
+                return True
+            if obj is self.app_combo and event.key() == Qt.Key.Key_Backtab:
+                self.save_btn.setFocus()
+                return True
+        return super().eventFilter(obj, event)
 
     def _show_add_app_menu(self):
         existing_apps = set(get_all_shortcuts().keys())
@@ -221,6 +341,7 @@ class SettingsWindow(QMainWindow):
         btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         btn.clicked.connect(lambda checked, r=row: self._delete_row(r))
         self.table.setCellWidget(row, 2, btn)
+        btn.installEventFilter(self.table)
 
     def _add_shortcut(self):
         row = self.table.rowCount()
