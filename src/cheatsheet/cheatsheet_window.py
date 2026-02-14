@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import QGridLayout, QLabel, QMainWindow, QVBoxLayout, QWidg
 
 from src.data_storage import get_app_shortcuts, get_default_shortcuts
 from src.platform.window_detection import get_focused_app_name
+from src.platform.window_movement import get_window_details, get_window_id_by_title, get_work_area, move_window
 
 DARK_THEME = """
     QMainWindow {
@@ -20,6 +21,9 @@ class CheatsheetWindow(QMainWindow):
         self.setWindowTitle("Shortcut Cheatsheet")
         self.setStyleSheet(DARK_THEME)
         self._current_app = None
+        self._corner_v = "top"
+        self._corner_h = "right"
+        self._initial_move_done = False
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -92,3 +96,54 @@ class CheatsheetWindow(QMainWindow):
         self.setFixedSize(self.sizeHint())
         self.setMinimumSize(0, 0)
         self.setMaximumSize(16777215, 16777215)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._initial_move_done:
+            self._initial_move_done = True
+            QTimer.singleShot(100, self._move_to_corner)
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key == Qt.Key.Key_Up:
+            self._corner_v = "top"
+            self._move_to_corner()
+        elif key == Qt.Key.Key_Down:
+            self._corner_v = "bottom"
+            self._move_to_corner()
+        elif key == Qt.Key.Key_Left:
+            self._corner_h = "left"
+            self._move_to_corner()
+        elif key == Qt.Key.Key_Right:
+            self._corner_h = "right"
+            self._move_to_corner()
+        else:
+            super().keyPressEvent(event)
+
+    def _move_to_corner(self):
+        try:
+            work_area = get_work_area()
+            if not work_area:
+                return
+
+            window_id = get_window_id_by_title(self.windowTitle())
+            if window_id is None:
+                return
+
+            details = get_window_details(window_id)
+            win_width = details["width"]
+            win_height = details["height"]
+
+            if self._corner_h == "left":
+                x = work_area["x"]
+            else:
+                x = work_area["x"] + work_area["width"] - win_width
+
+            if self._corner_v == "top":
+                y = work_area["y"]
+            else:
+                y = work_area["y"] + work_area["height"] - win_height
+
+            move_window(window_id, x, y)
+        except Exception:
+            pass

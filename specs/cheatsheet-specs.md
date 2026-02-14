@@ -9,7 +9,7 @@ The cheatsheet window will
 - display the shortcut's actions on the left column.
 - display the shortcut's key combination in the right column.
 - adjust the window size to fit the length and width of the table.
-- be movable to the 4 corners of the screen with the arrow keys.
+- be movable to the 4 corners of the screen with the arrow keys, sitting flush to the screen edges.
 - control font size with ctrl + and ctrl -.
 - have persistent font size between launches.
 - use a dark theme.
