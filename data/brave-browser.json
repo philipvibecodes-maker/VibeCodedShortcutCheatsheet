@@ -9,10 +9,6 @@
     {
       "keys": "Ctrl+W",
       "description": "Close tab"
-    },
-    {
-      "keys": "Ctrl+Shift+T",
-      "description": "Reopen closed tab"
     }
   ]
 }
