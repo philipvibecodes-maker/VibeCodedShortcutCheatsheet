@@ -20,6 +20,7 @@ class CheatsheetWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Shortcut Cheatsheet")
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
         self.setStyleSheet(DARK_THEME)
         self._current_app = None
         self._corner_v = "top"
