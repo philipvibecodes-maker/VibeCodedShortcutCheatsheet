@@ -5,6 +5,14 @@
     {
       "keys": "Ctrl+Shift+C",
       "description": "Copy"
+    },
+    {
+      "keys": "Ctrl+Shift+V",
+      "description": "Paste"
+    },
+    {
+      "keys": "Ctrl+Shift+T",
+      "description": "New Tab"
     }
   ]
 }

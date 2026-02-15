@@ -185,7 +185,21 @@ class CheatsheetWindow(QMainWindow):
             return
 
         self._settings_window = SettingsWindow(app_name=self._current_app or "default")
+        self._settings_window.shortcuts_saved.connect(self._on_shortcuts_saved)
+        self._settings_window.app_deleted.connect(self._on_app_deleted)
         self._settings_window.show()
+
+    def _on_shortcuts_saved(self, app_name):
+        """Refresh the cheatsheet display if the saved app matches the currently displayed app."""
+        if app_name == self._current_app:
+            data = get_app_shortcuts(app_name)
+            if data:
+                self._display_shortcuts(data)
+
+    def _on_app_deleted(self, app_name):
+        """Update display to show default shortcuts if the deleted app is currently displayed."""
+        if app_name == self._current_app:
+            self._display_shortcuts(get_default_shortcuts())
 
     def _move_to_corner(self):
         try:

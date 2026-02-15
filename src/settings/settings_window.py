@@ -1,8 +1,9 @@
-from PyQt6.QtCore import QEvent, Qt
+from PyQt6.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QHeaderView,
+    QLineEdit,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -33,6 +34,17 @@ class ShortcutTable(QTableWidget):
             item = self.item(row, col)
             if item:
                 self.editItem(item)
+                # Deselect text after editor is created
+                QTimer.singleShot(0, self._deselect_current_editor)
+
+    def _deselect_current_editor(self):
+        """Deselect text in the current cell editor and position cursor at the end."""
+        editor = self.findChild(QLineEdit)
+        if editor:
+            editor.deselect()
+            editor.setCursorPosition(len(editor.text()))
+            # Install event filter for proper Tab/Shift+Tab navigation
+            editor.installEventFilter(self)
 
     def focusInEvent(self, event):
         super().focusInEvent(event)
@@ -75,12 +87,13 @@ class ShortcutTable(QTableWidget):
         return super().eventFilter(obj, event)
 
     def _focus_outside(self, forward):
-        self.setCurrentCell(-1, -1)
         target = self.tab_next_widget if forward else self.tab_prev_widget
         if target:
             target.setFocus()
         else:
             QWidget.focusNextPrevChild(self, forward)
+        # Clear cell selection after focus has moved (so editor commits first)
+        self.setCurrentCell(-1, -1)
 
     def _tab_direction(self, event):
         if event.key() == Qt.Key.Key_Backtab:
@@ -182,6 +195,9 @@ DARK_THEME = """
 
 
 class SettingsWindow(QMainWindow):
+    shortcuts_saved = pyqtSignal(str)  # Signal emitted when shortcuts are saved, passes app_name
+    app_deleted = pyqtSignal(str)  # Signal emitted when an app is deleted, passes app_name
+
     def __init__(self, app_name=None):
         super().__init__()
         self.setWindowTitle("Settings")
@@ -310,7 +326,9 @@ class SettingsWindow(QMainWindow):
         if msg.exec() != QMessageBox.StandardButton.Yes:
             return
 
+        deleted_app_name = self._app_name
         delete_app_shortcuts(self._app_name)
+        self.app_deleted.emit(deleted_app_name)  # Notify that app was deleted
         index = self.app_combo.currentIndex()
         self.app_combo.removeItem(index)
         if self.app_combo.count() > 0:
@@ -371,6 +389,9 @@ class SettingsWindow(QMainWindow):
                 btn.clicked.connect(lambda checked, row=r: self._delete_row(row))
 
     def _save_and_close(self):
+        # Close any open editor to ensure changes are committed
+        self.table.setCurrentCell(-1, -1)
+
         if not self._app_name:
             self.close()
             return
@@ -385,4 +406,5 @@ class SettingsWindow(QMainWindow):
                 shortcuts.append({"keys": keys, "description": description})
 
         save_app_shortcuts(self._app_name, shortcuts)
+        self.shortcuts_saved.emit(self._app_name)  # Notify that shortcuts were saved
         self.close()

@@ -13,6 +13,10 @@
     {
       "keys": "Super+L",
       "description": "Lock screen"
+    },
+    {
+      "keys": "Ctrl+D",
+      "description": "Show desktop"
     }
   ]
 }
