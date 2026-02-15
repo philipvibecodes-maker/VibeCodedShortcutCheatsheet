@@ -72,7 +72,10 @@ class ShortcutTable(QTableWidget):
             forward = self._tab_direction(event)
             if forward is not None:
                 row, col = self._find_cell_widget(obj)
-                if row is not None:
+                # If not found as a cell widget, check if it's a temporary editor
+                if row is None and isinstance(obj, QLineEdit):
+                    row, col = self.currentRow(), self.currentColumn()
+                if row is not None and row >= 0 and col >= 0:
                     if self._at_boundary_cell(row, col, forward):
                         self._focus_outside(forward)
                         return True
@@ -81,8 +84,7 @@ class ShortcutTable(QTableWidget):
                     w = self.cellWidget(next_row, next_col)
                     if w:
                         w.setFocus()
-                    else:
-                        self.setFocus()
+                    # Don't call setFocus() for regular cells - _on_cell_changed handles it
                     return True
         return super().eventFilter(obj, event)
 
@@ -377,7 +379,8 @@ class SettingsWindow(QMainWindow):
         self.table.setItem(row, 0, QTableWidgetItem(""))
         self.table.setItem(row, 1, QTableWidgetItem(""))
         self._add_delete_button(row)
-        self.table.editItem(self.table.item(row, 0))
+        # Use setCurrentCell to trigger _on_cell_changed, which installs event filter
+        self.table.setCurrentCell(row, 0)
 
     def _delete_row(self, row):
         self.table.removeRow(row)
