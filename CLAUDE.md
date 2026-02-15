@@ -9,7 +9,7 @@ Shortcut Cheatsheet is a desktop app that displays keyboard shortcuts for the cu
 ## Prerequisites
 
 - Ubuntu 24 with Gnome and Wayland
-- The "window-calls" Gnome extension installed (provides DBus API for window info on Wayland)
+- The "window-calls" Gnome extension installed (provides DBus API for window detection on Wayland)
 
 ## Tech Stack
 
@@ -28,12 +28,12 @@ venv/bin/python -m pytest tests/ -v  # Run all tests
 
 The codebase should be modular with platform-specific operations isolated for future cross-platform support. Keep these concerns in separate modules:
 - **Window detection** — getting the currently focused window (via DBus/window-calls)
-- **Window movement** — repositioning windows (must use DBus on Wayland, not PyQt's move)
+- **Window movement** — repositioning windows (uses standard Qt `move()` under XWayland)
 - **Window pinning** — keeping windows above others
 
 ## Key Design Decisions
 
-- **Wayland constraint**: Standard PyQt window move doesn't work on Wayland. Use the DBus API from the "window-calls" extension for window positioning.
+- **XWayland**: The app runs under XWayland, so standard Qt `move()` works for window positioning. The "window-calls" extension is only needed for window detection.
 - **Application identification**: Use only the application name (not window title or PID) to identify windows.
 - **Keyboard-first UI**: Everything navigable without a mouse. Use mnemonics, Tab/Shift+Tab navigation, and sensible default keybindings.
 - **Cheatsheet window**: Standard (not borderless) window, dark theme, auto-sizes to fit content (no fixed/minimum dimensions), movable to screen corners with arrow keys, font size adjustable with Ctrl+/Ctrl- and persisted.

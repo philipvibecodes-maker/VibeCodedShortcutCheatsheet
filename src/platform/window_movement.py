@@ -1,4 +1,3 @@
-import json
 import subprocess
 
 from src.platform.window_detection import get_open_windows
@@ -11,39 +10,6 @@ def get_window_id_by_app_name(app_name):
         if window.get("wm_class") == app_name:
             return window.get("id")
     return None
-
-
-def get_window_id_by_title(title):
-    """Return the window-calls ID for the first window matching the given title."""
-    windows = get_open_windows()
-    for window in windows:
-        if window.get("title") == title:
-            return window.get("id")
-    return None
-
-
-def get_window_details(window_id):
-    """Return the window details dict from the window-calls DBus extension.
-
-    Includes WM-reported position (x, y) and size (width, height) in physical pixels,
-    which accounts for server-side decorations (titlebar, borders).
-    """
-    result = subprocess.run(
-        [
-            "gdbus", "call", "--session",
-            "--dest", "org.gnome.Shell",
-            "--object-path", "/org/gnome/Shell/Extensions/Windows",
-            "--method", "org.gnome.Shell.Extensions.Windows.Details",
-            str(window_id),
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"gdbus Details failed: {result.stderr.strip()}")
-    raw = result.stdout.strip()
-    json_str = raw[2:-3]
-    return json.loads(json_str)
 
 
 def get_work_area():
@@ -66,18 +32,28 @@ def get_work_area():
     return {"x": values[0], "y": values[1], "width": values[2], "height": values[3]}
 
 
-def move_window(window_id, x, y):
-    """Move a window to (x, y) using the window-calls DBus extension."""
-    result = subprocess.run(
-        [
-            "gdbus", "call", "--session",
-            "--dest", "org.gnome.Shell",
-            "--object-path", "/org/gnome/Shell/Extensions/Windows",
-            "--method", "org.gnome.Shell.Extensions.Windows.Move",
-            str(window_id), str(x), str(y),
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"gdbus Move failed: {result.stderr.strip()}")
+def get_corner_position(window, corner_v, corner_h):
+    """Return (x, y) to position a QWidget in the given screen corner.
+
+    Uses frameGeometry() to account for window decorations (titlebar, borders).
+    Returns None if the work area cannot be determined.
+    """
+    work_area = get_work_area()
+    if not work_area:
+        return None
+
+    frame = window.frameGeometry()
+    win_width = frame.width()
+    win_height = frame.height()
+
+    if corner_h == "left":
+        x = work_area["x"]
+    else:
+        x = work_area["x"] + work_area["width"] - win_width
+
+    if corner_v == "top":
+        y = 0
+    else:
+        y = work_area["y"] + work_area["height"] - win_height
+
+    return (x, y)

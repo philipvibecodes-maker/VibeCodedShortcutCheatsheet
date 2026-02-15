@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import QApplication, QGridLayout, QLabel, QMainWindow, QVBo
 
 from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, save_font_size
 from src.platform.window_detection import get_focused_window
-from src.platform.window_movement import get_window_details, get_window_id_by_title, get_work_area, move_window
+from src.platform.window_movement import get_corner_position
 from src.settings.settings_window import SettingsWindow
 
 DARK_THEME = """
@@ -188,28 +188,8 @@ class CheatsheetWindow(QMainWindow):
 
     def _move_to_corner(self):
         try:
-            work_area = get_work_area()
-            if not work_area:
-                return
-
-            window_id = get_window_id_by_title(self.windowTitle())
-            if window_id is None:
-                return
-
-            details = get_window_details(window_id)
-            win_width = details["width"]
-            win_height = details["height"]
-
-            if self._corner_h == "left":
-                x = work_area["x"]
-            else:
-                x = work_area["x"] + work_area["width"] - win_width
-
-            if self._corner_v == "top":
-                y = work_area["y"]
-            else:
-                y = work_area["y"] + work_area["height"] - win_height
-
-            move_window(window_id, x, y)
+            pos = get_corner_position(self, self._corner_v, self._corner_h)
+            if pos:
+                self.move(pos[0], pos[1])
         except Exception:
             pass
