@@ -24,6 +24,16 @@ class ShortcutTable(QTableWidget):
     tab_next_widget = None
     tab_prev_widget = None
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.currentCellChanged.connect(self._on_cell_changed)
+
+    def _on_cell_changed(self, row, col, prev_row, prev_col):
+        if row >= 0 and col >= 0 and not self.cellWidget(row, col):
+            item = self.item(row, col)
+            if item:
+                self.editItem(item)
+
     def focusInEvent(self, event):
         super().focusInEvent(event)
         if self.rowCount() == 0:
