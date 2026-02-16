@@ -1,5 +1,16 @@
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QApplication, QFrame, QGridLayout, QLabel, QMainWindow, QVBoxLayout, QWidget
+from PyQt6.QtCore import Qt, QTimer, QRect
+from PyQt6.QtGui import QPainter, QColor, QFont
+from PyQt6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, save_font_size
 from src.platform.window_detection import get_focused_window
@@ -20,6 +31,43 @@ DARK_THEME = """
         background-color: transparent;
     }
 """
+
+
+class CircularButton(QPushButton):
+    """A truly circular button using custom painting."""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self._size = 16  # Default size in pixels
+
+    def set_size(self, size):
+        """Set the size (diameter) of the circular button in pixels."""
+        self._size = int(size)
+        self.setFixedSize(self._size, self._size)
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Determine color based on state
+        if self.isDown():
+            color = QColor("#b71c1c")
+        elif self.underMouse():
+            color = QColor("#f44336")
+        else:
+            color = QColor("#d32f2f")
+
+        # Draw circle
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawEllipse(0, 0, self._size, self._size)
+
+        # Draw text
+        painter.setPen(QColor("white"))
+        font = QFont("Arial", int(self._size * 0.6), QFont.Weight.Bold)
+        painter.setFont(font)
+        painter.drawText(QRect(0, 0, self._size, self._size), Qt.AlignmentFlag.AlignCenter, self.text())
 
 
 class CheatsheetWindow(QMainWindow):
@@ -44,10 +92,23 @@ class CheatsheetWindow(QMainWindow):
         layout = QVBoxLayout(central)
         layout.setContentsMargins(10, 10, 10, 10)
 
+        # Add header with app label and close button
+        header_layout = QHBoxLayout()
+        header_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
         self.app_label = QLabel()
-        self.app_label.setStyleSheet(f"font-size: {self._font_size + 2}pt; padding-bottom: 4px;")
+        self.app_label.setStyleSheet(f"font-size: {self._font_size + 2}pt;")
         self.app_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.app_label)
+
+        self.close_button = CircularButton("×")
+        self.close_button.set_size(self._font_size * 1.2)
+        self.close_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.close_button.clicked.connect(self.close)
+        self.close_button.setToolTip("Close")
+
+        header_layout.addWidget(self.app_label, alignment=Qt.AlignmentFlag.AlignVCenter)
+        header_layout.addWidget(self.close_button, alignment=Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(header_layout)
 
         self.grid_widget = QWidget()
         self.grid_layout = QGridLayout(self.grid_widget)
@@ -188,7 +249,8 @@ class CheatsheetWindow(QMainWindow):
         self._apply_font_size()
 
     def _apply_font_size(self):
-        self.app_label.setStyleSheet(f"font-size: {self._font_size + 2}pt; padding-bottom: 4px;")
+        self.app_label.setStyleSheet(f"font-size: {self._font_size + 2}pt;")
+        self.close_button.set_size(self._font_size * 1.2)
         for i in range(self.grid_layout.count()):
             widget = self.grid_layout.itemAt(i).widget()
             if widget:
