@@ -36,7 +36,7 @@ The codebase should be modular with platform-specific operations isolated for fu
 - **XWayland**: The app runs under XWayland, so standard Qt `move()` works for window positioning. The "window-calls" extension is only needed for window detection.
 - **Application identification**: Use only the application name (not window title or PID) to identify windows.
 - **Keyboard-first UI**: Everything navigable without a mouse. Use mnemonics, Tab/Shift+Tab navigation, and sensible default keybindings.
-- **Cheatsheet window**: Standard (not borderless) window, dark theme, auto-sizes to fit content (no fixed/minimum dimensions), movable to screen corners with arrow keys, font size adjustable with Ctrl+/Ctrl- and persisted.
+- **Cheatsheet window**: Borderless window with rounded corners, dark theme, auto-sizes to fit content (no fixed/minimum dimensions), movable to screen corners with arrow keys, font size adjustable with Ctrl+/Ctrl- and persisted.
 - **Settings window**: Opens with `S` key from cheatsheet. Editable shortcut table, app switching menu, add/delete app profiles. All elements focusable and mnemonic-accessible.
 
 ## Specs

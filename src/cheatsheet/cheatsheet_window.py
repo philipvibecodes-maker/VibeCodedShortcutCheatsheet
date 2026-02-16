@@ -9,9 +9,15 @@ from src.settings.settings_window import SettingsWindow
 DARK_THEME = """
     QMainWindow {
         background-color: #2b2b2b;
+        border-radius: 10px;
+    }
+    QWidget#central_widget {
+        background-color: #2b2b2b;
+        border-radius: 10px;
     }
     QLabel {
         color: #e0e0e0;
+        background-color: transparent;
     }
 """
 
@@ -20,7 +26,10 @@ class CheatsheetWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Shortcut Cheatsheet")
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setStyleSheet(DARK_THEME)
         self._current_app = None
         self._corner_v = "top"
@@ -30,9 +39,10 @@ class CheatsheetWindow(QMainWindow):
         self._settings_window = None
 
         central = QWidget()
+        central.setObjectName("central_widget")
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(10, 10, 10, 10)
 
         self.app_label = QLabel()
         self.app_label.setStyleSheet(f"font-size: {self._font_size + 2}pt; padding-bottom: 4px;")
@@ -208,3 +218,9 @@ class CheatsheetWindow(QMainWindow):
                 self.move(pos[0], pos[1])
         except Exception:
             pass
+
+    def closeEvent(self, event):
+        """Close the settings window when the cheatsheet window is closed."""
+        if self._settings_window and self._settings_window.isVisible():
+            self._settings_window.close()
+        super().closeEvent(event)

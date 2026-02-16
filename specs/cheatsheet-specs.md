@@ -1,7 +1,7 @@
 ## Specifications for the cheatsheet window
 The cheatsheet window will
 - start in the top right corner.
-- be a standard window, not a borderless window.
+- be a borderless window with rounded corners.
 - open when the application is launched.
 - display the application name for the currently focused application (unless the currently focused application is this application, in which case the default shortcuts should be displayed.).
 - show the shortcuts for the currently focused application, ( unless the currently focused application is this application, in which case, in which case the default shortcuts should be displayed.).
