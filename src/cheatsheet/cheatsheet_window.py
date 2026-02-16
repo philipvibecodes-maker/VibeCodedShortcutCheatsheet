@@ -1,5 +1,5 @@
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QApplication, QGridLayout, QLabel, QMainWindow, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QFrame, QGridLayout, QLabel, QMainWindow, QVBoxLayout, QWidget
 
 from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, save_font_size
 from src.platform.window_detection import get_focused_window
@@ -119,7 +119,8 @@ class CheatsheetWindow(QMainWindow):
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
         self._main_layout.addWidget(self.grid_widget)
 
-        for row, shortcut in enumerate(data["shortcuts"]):
+        grid_row = 0
+        for i, shortcut in enumerate(data["shortcuts"]):
             desc_label = QLabel(shortcut["description"])
             desc_label.setStyleSheet(f"font-size: {self._font_size}pt; padding: 2px 4px;")
 
@@ -127,8 +128,18 @@ class CheatsheetWindow(QMainWindow):
             keys_label.setStyleSheet(f"font-size: {self._font_size}pt; padding: 2px 4px;")
             keys_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-            self.grid_layout.addWidget(desc_label, row, 0)
-            self.grid_layout.addWidget(keys_label, row, 1)
+            self.grid_layout.addWidget(desc_label, grid_row, 0)
+            self.grid_layout.addWidget(keys_label, grid_row, 1)
+            grid_row += 1
+
+            # Add separator between rows (but not after the last row)
+            if i < len(data["shortcuts"]) - 1:
+                separator = QFrame()
+                separator.setFrameShape(QFrame.Shape.NoFrame)
+                separator.setFixedHeight(1)
+                separator.setStyleSheet("background-color: #444444;")
+                self.grid_layout.addWidget(separator, grid_row, 0, 1, 2)
+                grid_row += 1
 
         self._main_layout.activate()
         self.setFixedSize(self.sizeHint())
