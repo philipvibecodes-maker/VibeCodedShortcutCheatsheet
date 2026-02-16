@@ -3,14 +3,6 @@
   "display_name": "Ubuntu (Default)",
   "shortcuts": [
     {
-      "keys": "Super",
-      "description": "Show Activities overview"
-    },
-    {
-      "keys": "Alt+Tab",
-      "description": "Switch between windows"
-    },
-    {
       "keys": "Super+L",
       "description": "Lock screen"
     },

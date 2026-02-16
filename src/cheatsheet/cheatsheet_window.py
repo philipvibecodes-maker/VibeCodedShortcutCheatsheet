@@ -19,11 +19,11 @@ from src.settings.settings_window import SettingsWindow
 
 DARK_THEME = """
     QMainWindow {
-        background-color: #2b2b2b;
+        background-color: #1a1a1a;
         border-radius: 10px;
     }
     QWidget#central_widget {
-        background-color: #2b2b2b;
+        background-color: #1a1a1a;
         border-radius: 10px;
     }
     QLabel {
