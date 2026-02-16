@@ -90,7 +90,8 @@ class CheatsheetWindow(QMainWindow):
         central.setObjectName("central_widget")
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(10, 10, 10, 10)
+        window_margin = int(self._font_size * 0.4)
+        layout.setContentsMargins(window_margin, window_margin, window_margin, window_margin)
 
         # Add header with app label and close button
         header_layout = QHBoxLayout()
@@ -178,15 +179,20 @@ class CheatsheetWindow(QMainWindow):
         self.grid_widget = QWidget()
         self.grid_layout = QGridLayout(self.grid_widget)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
+        vertical_spacing = int(self._font_size * 0.2)
+        self.grid_layout.setVerticalSpacing(vertical_spacing)
+        self.grid_layout.setHorizontalSpacing(0)
         self._main_layout.addWidget(self.grid_widget)
 
         grid_row = 0
+        vertical_padding = int(self._font_size * 0.15)
+        horizontal_padding = int(self._font_size * 0.3)
         for i, shortcut in enumerate(data["shortcuts"]):
             desc_label = QLabel(shortcut["description"])
-            desc_label.setStyleSheet(f"font-size: {self._font_size}pt; padding: 2px 4px;")
+            desc_label.setStyleSheet(f"font-size: {self._font_size}pt; padding: {vertical_padding}px {horizontal_padding}px;")
 
             keys_label = QLabel(shortcut["keys"])
-            keys_label.setStyleSheet(f"font-size: {self._font_size}pt; padding: 2px 4px;")
+            keys_label.setStyleSheet(f"font-size: {self._font_size}pt; padding: {vertical_padding}px {horizontal_padding}px;")
             keys_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
             self.grid_layout.addWidget(desc_label, grid_row, 0)
@@ -251,10 +257,16 @@ class CheatsheetWindow(QMainWindow):
     def _apply_font_size(self):
         self.app_label.setStyleSheet(f"font-size: {self._font_size + 2}pt;")
         self.close_button.set_size(self._font_size * 1.2)
+        vertical_padding = int(self._font_size * 0.15)
+        horizontal_padding = int(self._font_size * 0.3)
+        vertical_spacing = int(self._font_size * 0.2)
+        window_margin = int(self._font_size * 0.4)
+        self._main_layout.setContentsMargins(window_margin, window_margin, window_margin, window_margin)
+        self.grid_layout.setVerticalSpacing(vertical_spacing)
         for i in range(self.grid_layout.count()):
             widget = self.grid_layout.itemAt(i).widget()
-            if widget:
-                widget.setStyleSheet(f"font-size: {self._font_size}pt; padding: 2px 4px;")
+            if widget and isinstance(widget, QLabel):
+                widget.setStyleSheet(f"font-size: {self._font_size}pt; padding: {vertical_padding}px {horizontal_padding}px;")
         self._main_layout.activate()
         self.setFixedSize(self.sizeHint())
         self.setMinimumSize(0, 0)
