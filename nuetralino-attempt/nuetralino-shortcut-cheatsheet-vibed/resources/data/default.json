@@ -1,0 +1,14 @@
+{
+  "app_name": "default",
+  "display_name": "Ubuntu (Default)",
+  "shortcuts": [
+    {
+      "keys": "Super+L",
+      "description": "Lock screen"
+    },
+    {
+      "keys": "Ctrl+D",
+      "description": "Show desktop"
+    }
+  ]
+}

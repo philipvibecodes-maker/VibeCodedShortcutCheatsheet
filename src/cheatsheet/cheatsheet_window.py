@@ -78,6 +78,7 @@ class CheatsheetWindow(QMainWindow):
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setStyleSheet(DARK_THEME)
         self._current_app = None
         self._corner_v = "top"
