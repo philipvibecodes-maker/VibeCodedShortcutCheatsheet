@@ -4,7 +4,6 @@ from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
     QGridLayout,
-    QHBoxLayout,
     QLabel,
     QMainWindow,
     QPushButton,
@@ -34,14 +33,14 @@ DARK_THEME = """
 
 
 class CircularButton(QPushButton):
-    """A truly circular button using custom painting."""
+    """A square button using custom painting."""
 
     def __init__(self, text="", parent=None):
         super().__init__(text, parent)
         self._size = 16  # Default size in pixels
 
     def set_size(self, size):
-        """Set the size (diameter) of the circular button in pixels."""
+        """Set the size of the square button in pixels."""
         self._size = int(size)
         self.setFixedSize(self._size, self._size)
         self.update()
@@ -58,10 +57,10 @@ class CircularButton(QPushButton):
         else:
             color = QColor("#d32f2f")
 
-        # Draw circle
+        # Draw square
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color)
-        painter.drawEllipse(0, 0, self._size, self._size)
+        painter.drawRect(0, 0, self._size, self._size)
 
         # Draw text
         painter.setPen(QColor("white"))
@@ -87,30 +86,18 @@ class CheatsheetWindow(QMainWindow):
         self._font_size = get_font_size()
         self._settings_window = None
 
-        central = QWidget()
-        central.setObjectName("central_widget")
-        self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
+        self.central = QWidget()
+        self.central.setObjectName("central_widget")
+        self.setCentralWidget(self.central)
+        layout = QVBoxLayout(self.central)
         window_margin = int(self._font_size * 0.4)
         layout.setContentsMargins(window_margin, window_margin, window_margin, window_margin)
 
-        # Add header with app label and close button
-        header_layout = QHBoxLayout()
-        header_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-
-        self.app_label = QLabel()
-        self.app_label.setStyleSheet(f"font-size: {self._font_size + 2}pt;")
-        self.app_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self.close_button = CircularButton("×")
-        self.close_button.set_size(self._font_size * 1.2)
+        self.close_button = CircularButton("×", self.central)
+        self.close_button.set_size(self._font_size * 1.08)
         self.close_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.close_button.clicked.connect(self.close)
         self.close_button.setToolTip("Close")
-
-        header_layout.addWidget(self.app_label, alignment=Qt.AlignmentFlag.AlignVCenter)
-        header_layout.addWidget(self.close_button, alignment=Qt.AlignmentFlag.AlignVCenter)
-        layout.addLayout(header_layout)
 
         self.grid_widget = QWidget()
         self.grid_layout = QGridLayout(self.grid_widget)
@@ -169,10 +156,7 @@ class CheatsheetWindow(QMainWindow):
 
     def _display_shortcuts(self, data):
         if not data:
-            self.app_label.setText("No shortcuts found")
             return
-
-        self.app_label.setText(data["display_name"])
 
         self._main_layout.removeWidget(self.grid_widget)
         self.grid_widget.setParent(None)
@@ -213,12 +197,14 @@ class CheatsheetWindow(QMainWindow):
         self.setFixedSize(self.sizeHint())
         self.setMinimumSize(0, 0)
         self.setMaximumSize(16777215, 16777215)
+        QTimer.singleShot(50, self._position_close_button)
         QTimer.singleShot(50, self._move_to_corner)
 
     def showEvent(self, event):
         super().showEvent(event)
         if not self._initial_move_done:
             self._initial_move_done = True
+            QTimer.singleShot(50, self._position_close_button)
             QTimer.singleShot(100, self._move_to_corner)
 
     def keyPressEvent(self, event):
@@ -256,8 +242,7 @@ class CheatsheetWindow(QMainWindow):
         self._apply_font_size()
 
     def _apply_font_size(self):
-        self.app_label.setStyleSheet(f"font-size: {self._font_size + 2}pt;")
-        self.close_button.set_size(self._font_size * 1.2)
+        self.close_button.set_size(self._font_size * 1.08)
         vertical_padding = int(self._font_size * 0.15)
         horizontal_padding = int(self._font_size * 0.3)
         vertical_spacing = int(self._font_size * 0.2)
@@ -272,6 +257,7 @@ class CheatsheetWindow(QMainWindow):
         self.setFixedSize(self.sizeHint())
         self.setMinimumSize(0, 0)
         self.setMaximumSize(16777215, 16777215)
+        QTimer.singleShot(50, self._position_close_button)
         QTimer.singleShot(50, self._move_to_corner)
 
     def _open_settings(self):
@@ -304,6 +290,15 @@ class CheatsheetWindow(QMainWindow):
                 self.move(pos[0], pos[1])
         except Exception:
             pass
+
+    def _position_close_button(self):
+        """Position the close button's top-right corner at the window's top-right corner."""
+        button_size = self.close_button.width()
+        window_width = self.width()
+        x = window_width - button_size
+        y = 0
+        self.close_button.move(int(x), int(y))
+        self.close_button.raise_()
 
     def closeEvent(self, event):
         """Close the settings window when the cheatsheet window is closed."""
