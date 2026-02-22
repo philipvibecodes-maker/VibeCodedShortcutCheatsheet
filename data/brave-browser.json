@@ -9,6 +9,10 @@
     {
       "keys": "Ctrl+W",
       "description": "Close tab"
+    },
+    {
+      "keys": "Ctrl+Space",
+      "description": "Search Pallete"
     }
   ]
 }

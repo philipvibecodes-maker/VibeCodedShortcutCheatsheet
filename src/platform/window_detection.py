@@ -2,6 +2,21 @@ import json
 import subprocess
 
 
+def is_window_calls_available():
+    """Check whether the window-calls Gnome extension is installed and enabled."""
+    result = subprocess.run(
+        [
+            "gdbus", "call", "--session",
+            "--dest", "org.gnome.Shell",
+            "--object-path", "/org/gnome/Shell/Extensions/Windows",
+            "--method", "org.gnome.Shell.Extensions.Windows.List",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
 def get_open_windows():
     """Return a list of window dicts from the window-calls DBus extension."""
     result = subprocess.run(
