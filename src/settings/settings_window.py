@@ -1,4 +1,5 @@
 from PyQt6.QtCore import QEvent, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -264,6 +265,8 @@ class SettingsWindow(QMainWindow):
         QWidget.setTabOrder(self.cancel_btn, self.save_btn)
         self.save_btn.installEventFilter(self)
         self.app_combo.installEventFilter(self)
+
+        QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
 
         if app_name:
             index = self.app_combo.findData(app_name)

@@ -126,7 +126,7 @@ class CheatsheetWindow(QMainWindow):
 
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._on_poll)
-        self._poll_timer.start(500)
+        self._poll_timer.start(100)
 
     def _on_poll(self):
         try:
@@ -220,7 +220,9 @@ class CheatsheetWindow(QMainWindow):
         modifiers = event.modifiers()
         ctrl = modifiers & Qt.KeyboardModifier.ControlModifier
 
-        if ctrl and key in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+        if ctrl and key == Qt.Key.Key_Q:
+            self.close()
+        elif ctrl and key in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
             self._change_font_size(1)
         elif ctrl and key == Qt.Key.Key_Minus:
             self._change_font_size(-1)
