@@ -3,16 +3,16 @@
   "display_name": "Brave Browser",
   "shortcuts": [
     {
-      "keys": "Ctrl+T",
-      "description": "New tab"
-    },
-    {
-      "keys": "Ctrl+W",
-      "description": "Close tab"
-    },
-    {
       "keys": "Ctrl+Space",
-      "description": "Search Pallete"
+      "description": "Command Pallete"
+    },
+    {
+      "keys": "b",
+      "description": "Open Bookmark"
+    },
+    {
+      "keys": "Shift + j/k",
+      "description": "Move tabs"
     }
   ]
 }

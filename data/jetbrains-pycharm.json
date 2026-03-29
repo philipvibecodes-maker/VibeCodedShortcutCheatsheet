@@ -3,16 +3,20 @@
   "display_name": "jetbrains-pycharm",
   "shortcuts": [
     {
-      "keys": "Shift + F12",
-      "description": "Maximize editor"
-    },
-    {
-      "keys": "Ctrl+Shift+\"",
+     "keys": "Ctrl+Shift+\"",
       "description": "Maximize Panel"
     },
     {
       "keys": "Alt+4",
       "description": "Run panel"
+    },
+    {
+      "keys": "Alt+F12",
+      "description": "Terminal"
+    },
+    {
+      "keys": "F2",
+      "description": "Next Problem"
     }
   ]
 }

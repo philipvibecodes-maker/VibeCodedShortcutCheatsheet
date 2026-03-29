@@ -4,15 +4,11 @@
   "shortcuts": [
     {
       "keys": "Ctrl+P",
-      "description": "Open file picker"
+      "description": "File search"
     },
     {
       "keys": "Ctrl+Shift+P",
-      "description": "Open command palette"
-    },
-    {
-      "keys": "Ctrl+/",
-      "description": "Toggle line comment"
+      "description": "Command palette"
     },
     {
       "keys": "Ctrl+B",
