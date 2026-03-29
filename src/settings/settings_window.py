@@ -205,6 +205,7 @@ class SettingsWindow(QMainWindow):
         self.setWindowTitle("Settings")
         self.setStyleSheet(DARK_THEME)
         self._app_name = app_name
+        self._new_apps = set()  # Apps added this session, not yet saved
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -310,6 +311,7 @@ class SettingsWindow(QMainWindow):
 
     def _add_app(self, app_name):
         save_app_shortcuts(app_name, [])
+        self._new_apps.add(app_name)
         self.app_combo.addItem(app_name, app_name)
         index = self.app_combo.findData(app_name)
         self.app_combo.setCurrentIndex(index)
@@ -329,15 +331,10 @@ class SettingsWindow(QMainWindow):
             return
 
         deleted_app_name = self._app_name
+        self._new_apps.discard(deleted_app_name)
         delete_app_shortcuts(self._app_name)
         self.app_deleted.emit(deleted_app_name)  # Notify that app was deleted
-        index = self.app_combo.currentIndex()
-        self.app_combo.removeItem(index)
-        if self.app_combo.count() > 0:
-            self.app_combo.setCurrentIndex(0)
-        else:
-            self._app_name = None
-            self.table.setRowCount(0)
+        self.close()
 
     def _populate_app_combo(self):
         all_shortcuts = get_all_shortcuts()
@@ -408,6 +405,14 @@ class SettingsWindow(QMainWindow):
             if description or keys:
                 shortcuts.append({"keys": keys, "description": description})
 
+        self._new_apps.discard(self._app_name)  # Mark as saved
         save_app_shortcuts(self._app_name, shortcuts)
         self.shortcuts_saved.emit(self._app_name)  # Notify that shortcuts were saved
         self.close()
+
+    def closeEvent(self, event):
+        """Remove unsaved new apps on close."""
+        for app_name in self._new_apps:
+            delete_app_shortcuts(app_name)
+        self._new_apps.clear()
+        super().closeEvent(event)

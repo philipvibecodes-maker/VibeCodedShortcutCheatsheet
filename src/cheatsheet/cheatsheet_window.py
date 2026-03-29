@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, has_app_shortcuts, save_font_size
+from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, has_app_shortcuts, save_app_shortcuts, save_font_size
 from src.platform.window_detection import get_focused_window
 from src.platform.window_movement import get_corner_position
 from src.settings.settings_window import SettingsWindow
@@ -279,11 +279,40 @@ class CheatsheetWindow(QMainWindow):
         self._settings_window.app_deleted.connect(self._on_app_deleted)
         self._settings_window.show()
 
+    def handle_second_instance(self, focused_app):
+        """Handle a second instance's toggle request."""
+        if self.isVisible():
+            QApplication.quit()
+        else:
+            self._open_settings_for_new_app(focused_app)
+
+    def _open_settings_for_new_app(self, app_name):
+        """Open settings window pre-set to add shortcuts for the given app."""
+        if self._settings_window and self._settings_window.isVisible():
+            self._settings_window.close()
+
+        self._settings_window = SettingsWindow()
+        self._settings_window.shortcuts_saved.connect(self._on_shortcuts_saved)
+        self._settings_window.app_deleted.connect(self._on_app_deleted)
+
+        if app_name and not has_app_shortcuts(app_name):
+            self._settings_window._add_app(app_name)
+        elif app_name:
+            index = self._settings_window.app_combo.findData(app_name)
+            if index >= 0:
+                self._settings_window.app_combo.setCurrentIndex(index)
+
+        self._settings_window.show()
+        self._settings_window.raise_()
+        self._settings_window.activateWindow()
+
     def _on_shortcuts_saved(self, app_name):
         """Refresh the cheatsheet display if the saved app matches the currently displayed app."""
         if app_name == self._current_app:
             data = get_app_shortcuts(app_name)
-            if data:
+            if data and data.get("shortcuts"):
+                if self.isHidden():
+                    self.show()
                 self._display_shortcuts(data)
 
     def _on_app_deleted(self, app_name):
