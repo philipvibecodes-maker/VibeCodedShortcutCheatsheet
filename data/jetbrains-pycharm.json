@@ -3,7 +3,7 @@
   "display_name": "jetbrains-pycharm",
   "shortcuts": [
     {
-      "keys": "Shift+F12",
+      "keys": "Shift + F12",
       "description": "Maximize editor"
     },
     {

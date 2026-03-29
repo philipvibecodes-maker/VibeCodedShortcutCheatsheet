@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, save_font_size
+from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, has_app_shortcuts, save_font_size
 from src.platform.window_detection import get_focused_window
 from src.platform.window_movement import get_corner_position
 from src.settings.settings_window import SettingsWindow
@@ -106,17 +106,23 @@ class CheatsheetWindow(QMainWindow):
         layout.addWidget(self.grid_widget)
 
         # Detect the currently focused app before our window takes focus
-        data = None
+        self._started_hidden = False
         try:
             focused = get_focused_window()
             if focused:
                 app_name = focused.get("wm_class")
                 if app_name:
                     self._current_app = app_name
-                    data = get_app_shortcuts(app_name)
+                    if has_app_shortcuts(app_name):
+                        self._display_shortcuts(get_app_shortcuts(app_name))
+                    else:
+                        self._started_hidden = True
         except Exception:
-            pass
-        self._display_shortcuts(data or get_default_shortcuts())
+            self._started_hidden = True
+        if self._started_hidden:
+            # Display something so the widget is initialized, then hide after show
+            self._display_shortcuts(get_default_shortcuts())
+            QTimer.singleShot(0, self.hide)
 
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._on_poll)
@@ -146,13 +152,15 @@ class CheatsheetWindow(QMainWindow):
 
         self._current_app = focused_app
 
-        data = None
-        if focused_app:
+        if focused_app and has_app_shortcuts(focused_app):
             data = get_app_shortcuts(focused_app)
-        if not data:
-            data = get_default_shortcuts()
-
-        self._display_shortcuts(data)
+            if data:
+                if self.isHidden():
+                    self.show()
+                self.raise_()
+                self._display_shortcuts(data)
+        else:
+            self.hide()
 
     def _display_shortcuts(self, data):
         if not data:
@@ -279,9 +287,9 @@ class CheatsheetWindow(QMainWindow):
                 self._display_shortcuts(data)
 
     def _on_app_deleted(self, app_name):
-        """Update display to show default shortcuts if the deleted app is currently displayed."""
+        """Minimize the cheatsheet if the deleted app is currently displayed."""
         if app_name == self._current_app:
-            self._display_shortcuts(get_default_shortcuts())
+            self.hide()
 
     def _move_to_corner(self):
         try:

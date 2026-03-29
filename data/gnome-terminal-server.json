@@ -3,7 +3,7 @@
   "display_name": "Gnome Terminal",
   "shortcuts": [
     {
-      "keys": "Ctrl+Shift+C",
+      "keys": "Ctrl + Shift+C",
       "description": "Copy"
     },
     {

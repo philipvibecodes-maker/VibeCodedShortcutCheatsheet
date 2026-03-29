@@ -168,6 +168,12 @@ def delete_app_shortcuts(app_name: str) -> bool:
     return False
 
 
+def has_app_shortcuts(app_name: str) -> bool:
+    """Check whether a shortcut profile exists for the given application."""
+    json_file = get_data_dir() / f"{app_name}.json"
+    return json_file.exists()
+
+
 def get_default_shortcuts() -> Optional[Dict]:
     """
     Get the default Ubuntu shortcuts.

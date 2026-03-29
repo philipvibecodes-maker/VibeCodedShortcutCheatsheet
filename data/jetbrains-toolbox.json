@@ -1,0 +1,10 @@
+{
+  "app_name": "jetbrains-toolbox",
+  "display_name": "jetbrains-toolbox",
+  "shortcuts": [
+    {
+      "keys": "Some shortcut",
+      "description": "Some Action"
+    }
+  ]
+}
