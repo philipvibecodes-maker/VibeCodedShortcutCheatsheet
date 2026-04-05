@@ -1,5 +1,9 @@
 import json
+import os
 import sys
+
+# Force XWayland so standard Qt move() works for window positioning
+os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
