@@ -2,7 +2,7 @@
 
 import time
 
-from src.platform.window_detection import get_open_app_names
+from src.platform import get_open_app_names
 
 
 while True:

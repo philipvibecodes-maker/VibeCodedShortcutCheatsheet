@@ -12,8 +12,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, has_app_shortcuts, save_app_shortcuts, save_font_size
-from src.platform.window_detection import get_focused_window
-from src.platform.window_movement import get_corner_position
+from src.platform import get_focused_window, get_corner_position
 from src.settings.settings_window import SettingsWindow
 
 DARK_THEME = """

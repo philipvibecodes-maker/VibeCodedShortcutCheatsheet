@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 
 
 from src.data_storage import delete_app_shortcuts, get_all_shortcuts, get_app_shortcuts, save_app_shortcuts
-from src.platform.window_detection import get_open_app_names
+from src.platform import get_open_app_names
 
 
 class ShortcutTable(QTableWidget):

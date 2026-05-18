@@ -2,7 +2,7 @@
 
 import time
 
-from src.platform.window_detection import get_focused_app_name
+from src.platform import get_focused_app_name
 
 
 start = time.time()

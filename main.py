@@ -2,15 +2,15 @@ import json
 import os
 import sys
 
-# Force XWayland so standard Qt move() works for window positioning
-os.environ["QT_QPA_PLATFORM"] = "xcb"
+# Force XWayland so standard Qt move() works for window positioning (Linux only)
+if sys.platform.startswith("linux"):
+    os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from PyQt6.QtCore import Qt
 
 from src.cheatsheet.cheatsheet_window import CheatsheetWindow
-from src.platform.window_detection import get_focused_window, is_window_calls_available
+from src.platform import get_focused_window, is_platform_supported
 
 SERVER_NAME = "ShortcutCheatsheet"
 
@@ -46,15 +46,9 @@ def main():
     if try_send_toggle():
         sys.exit(0)
 
-    if not is_window_calls_available():
-        msg = QMessageBox(QMessageBox.Icon.Critical, "Missing Extension",
-            'The "window-calls" Gnome extension is required but not found.')
-        msg.setInformativeText(
-            'Install it from:<br>'
-            '<a href="https://extensions.gnome.org/extension/4724/window-calls/">'
-            'https://extensions.gnome.org/extension/4724/window-calls/</a>'
-        )
-        msg.setTextFormat(Qt.TextFormat.RichText)
+    ok, message = is_platform_supported()
+    if not ok:
+        msg = QMessageBox(QMessageBox.Icon.Critical, "Platform Not Supported", message)
         msg.exec()
         sys.exit(1)
 
