@@ -1,6 +1,6 @@
 # Shortcut Cheatsheet
 
-A desktop app that displays keyboard shortcuts for the currently focused application on Ubuntu 24 (Gnome/Wayland). Features a borderless cheatsheet overlay with rounded corners and a settings editor for managing shortcuts.
+A desktop app that displays keyboard shortcuts for the currently focused application on Ubuntu 24 (Gnome/Wayland) and Windows. Features a borderless cheatsheet overlay with rounded corners and a settings editor for managing shortcuts.
 
 ## Features
 
@@ -15,10 +15,15 @@ A desktop app that displays keyboard shortcuts for the currently focused applica
 
 ## Prerequisites
 
-- Ubuntu 24 with Gnome and Wayland
 - Python 3.12+
+
+**Linux:**
+- Ubuntu 24 with Gnome and Wayland
 - The **window-calls** Gnome extension (provides DBus API for window detection on Wayland)
   - Install from: https://extensions.gnome.org/extension/4724/window-calls/
+
+**Windows:**
+- Windows 10/11 or Windows Server 2022+. No extras needed — focused-window detection uses the Win32 API directly and window positioning uses Qt, which handles the taskbar and display scaling automatically.
 
 ## Installation
 
@@ -31,20 +36,30 @@ cd shortcut-cheatsheet-vibed
 
 2. Create and activate virtual environment (if not already created):
 ```bash
+# Linux
 python3 -m venv venv
+
+# Windows
+python -m venv venv
 ```
 
 3. Install dependencies:
 ```bash
+# Linux
 venv/bin/pip install PyQt6
+
+# Windows
+venv\Scripts\pip install PyQt6
 ```
 
 ## Running the Application
 
-**Important**: The app must run under XWayland for proper window positioning:
-
 ```bash
+# Linux — the app must run under XWayland for proper window positioning:
 QT_QPA_PLATFORM=xcb venv/bin/python main.py
+
+# Windows — no special environment needed:
+venv\Scripts\python main.py
 ```
 
 ## Usage
@@ -88,13 +103,17 @@ shortcut-cheatsheet-vibed/
 ## Configuration
 
 - **Font size**: Stored in `data/config.json` (default: 12pt)
-- **Shortcuts**: Stored in `data/<app_name>.json`
+- **Shortcuts**: Stored in `data/<app_name>.json`. The app name is the `wm_class` on Linux (e.g. `brave-browser`) and the executable name on Windows (e.g. `notepad.exe`, `Code.exe`).
 - **Default shortcuts**: Stored in `data/default.json`
 
 ## Running Tests
 
 ```bash
+# Linux
 QT_QPA_PLATFORM=xcb venv/bin/python -m pytest tests/ -v
+
+# Windows
+venv\Scripts\python -m pytest tests/ -v
 ```
 
 ## Development
