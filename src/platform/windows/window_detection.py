@@ -199,9 +199,15 @@ def get_open_app_names():
 
 
 def get_focused_window():
-    """Return the window dict for the foreground window, or None."""
+    """Return the window dict for the foreground window, or None.
+
+    Shell windows (taskbar, desktop, Start menu) are treated as "no app
+    focused" so clicking them doesn't resolve to their explorer.exe owner.
+    """
     hwnd = _user32.GetForegroundWindow()
     if not hwnd:
+        return None
+    if _class_name(hwnd) in _SHELL_CLASSES:
         return None
     return _window_dict(hwnd, hwnd)
 

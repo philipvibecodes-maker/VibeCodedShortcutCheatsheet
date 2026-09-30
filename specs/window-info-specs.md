@@ -18,5 +18,6 @@ owning executable name, which is used as `wm_class`. Windows hosted by
 `ApplicationFrameHost.exe` (UWP apps) are resolved to the hosted app's
 process. DWM-cloaked windows, tool windows, owned popups, and shell
 windows (taskbar, desktop, Start menu) are filtered out of the window
-list. `get_focused_window` reports whatever window is foreground,
-filtered or not.
+list. `get_focused_window` reports the foreground window, filtered or
+not — except shell windows, which count as "no app focused" so focus
+falling back to the shell doesn't surface as `explorer.exe`.
