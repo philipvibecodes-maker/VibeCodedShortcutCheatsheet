@@ -1,0 +1,26 @@
+{
+  "app_name": "chrome.exe",
+  "display_name": "Google Chrome",
+  "shortcuts": [
+    {
+      "keys": "Ctrl+T",
+      "description": "New tab"
+    },
+    {
+      "keys": "Ctrl+W",
+      "description": "Close tab"
+    },
+    {
+      "keys": "Ctrl+Shift+T",
+      "description": "Reopen closed tab"
+    },
+    {
+      "keys": "Ctrl+L",
+      "description": "Focus address bar"
+    },
+    {
+      "keys": "Ctrl+Tab",
+      "description": "Next tab"
+    }
+  ]
+}

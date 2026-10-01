@@ -1,0 +1,30 @@
+{
+  "app_name": "Code.exe",
+  "display_name": "VS Code",
+  "shortcuts": [
+    {
+      "keys": "Ctrl+P",
+      "description": "Quick file open"
+    },
+    {
+      "keys": "Ctrl+Shift+P",
+      "description": "Command palette"
+    },
+    {
+      "keys": "Ctrl+`",
+      "description": "Toggle terminal"
+    },
+    {
+      "keys": "Ctrl+B",
+      "description": "Toggle sidebar"
+    },
+    {
+      "keys": "Ctrl+D",
+      "description": "Select next occurrence"
+    },
+    {
+      "keys": "Ctrl+Shift+F",
+      "description": "Search in files"
+    }
+  ]
+}

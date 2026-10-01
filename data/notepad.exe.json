@@ -1,0 +1,30 @@
+{
+  "app_name": "notepad.exe",
+  "display_name": "Notepad",
+  "shortcuts": [
+    {
+      "keys": "Ctrl+N",
+      "description": "New window"
+    },
+    {
+      "keys": "Ctrl+O",
+      "description": "Open file"
+    },
+    {
+      "keys": "Ctrl+S",
+      "description": "Save"
+    },
+    {
+      "keys": "Ctrl+F",
+      "description": "Find"
+    },
+    {
+      "keys": "Ctrl+H",
+      "description": "Replace"
+    },
+    {
+      "keys": "F5",
+      "description": "Insert date/time"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "app_name": "explorer.exe",
+  "display_name": "File Explorer",
+  "shortcuts": [
+    {
+      "keys": "Win+E",
+      "description": "Open File Explorer"
+    },
+    {
+      "keys": "Alt+D",
+      "description": "Focus address bar"
+    },
+    {
+      "keys": "Ctrl+Shift+N",
+      "description": "New folder"
+    },
+    {
+      "keys": "Alt+Left",
+      "description": "Back"
+    },
+    {
+      "keys": "F2",
+      "description": "Rename"
+    },
+    {
+      "keys": "Alt+Enter",
+      "description": "Properties"
+    }
+  ]
+}
