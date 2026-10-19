@@ -125,6 +125,8 @@ class CheatsheetWindow(QMainWindow):
             # Display something so the widget is initialized, then hide after show
             self._display_shortcuts(get_default_shortcuts())
             QTimer.singleShot(0, self.hide)
+            # Launching on an unprofiled app opens the add-shortcuts window
+            QTimer.singleShot(0, lambda: self._open_settings_for_new_app(self._current_app))
 
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._on_poll)
@@ -303,6 +305,13 @@ class CheatsheetWindow(QMainWindow):
         """Handle a second instance's toggle request."""
         if self.isVisible():
             QApplication.quit()
+        elif focused_app and self._resolve_shortcuts(focused_app, focused_title):
+            self._current_app = focused_app
+            self._current_title = focused_title
+            self._display_shortcuts(
+                self._resolve_shortcuts(focused_app, focused_title))
+            self.show()
+            self.raise_()
         else:
             self._open_settings_for_new_app(focused_app, focused_title)
 

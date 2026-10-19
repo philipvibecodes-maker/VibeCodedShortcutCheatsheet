@@ -169,9 +169,9 @@ def delete_app_shortcuts(app_name: str) -> bool:
 
 
 def has_app_shortcuts(app_name: str) -> bool:
-    """Check whether a shortcut profile exists for the given application."""
-    json_file = get_data_dir() / f"{app_name}.json"
-    return json_file.exists()
+    """Check whether the given application has at least one recorded shortcut."""
+    data = get_app_shortcuts(app_name)
+    return bool(data and data.get("shortcuts"))
 
 
 def get_tab_profiles(app_name: str) -> List[Dict]:

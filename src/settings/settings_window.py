@@ -327,9 +327,9 @@ class SettingsWindow(QMainWindow):
     def _add_app(self, app_name):
         save_app_shortcuts(app_name, [])
         self._new_apps.add(app_name)
-        self.app_combo.addItem(app_name, (app_name, None))
-        index = self._find_index(app_name)
-        self.app_combo.setCurrentIndex(index)
+        if self._find_index(app_name) < 0:
+            self.app_combo.addItem(app_name, (app_name, None))
+        self.app_combo.setCurrentIndex(self._find_index(app_name))
 
     def _add_tab(self):
         """Create a tab profile under the selected app.
