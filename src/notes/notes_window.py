@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.platform import get_focused_window
 from src.data_storage import (
     add_topic,
     add_topic_entry,
@@ -420,15 +421,26 @@ class NotesWindow(QMainWindow):
     def changeEvent(self, event):
         super().changeEvent(event)
         if event.type() == QEvent.Type.ActivationChange and not self.isActiveWindow():
-            QTimer.singleShot(250, self._close_if_unfocused)
+            self._unfocused_checks = 0
+            QTimer.singleShot(200, self._close_if_unfocused)
 
-    def _close_if_unfocused(self, recheck=True):
-        # Close when focus left the app entirely; ignore our own modal dialogs.
-        # Activation flickers briefly during maximize/move on GNOME, so require
-        # the unfocused state to persist across two checks before closing.
-        if QApplication.activeWindow() is not None:
+    def _close_if_unfocused(self):
+        """Close when another app takes focus; survive maximize/move flicker.
+
+        Qt's active-window state can stay unset through XWayland maximize
+        transitions, so the OS-level focused window is the source of truth:
+        if it still reports our title, we're mid-transition — do nothing.
+        """
+        if self.isActiveWindow() or QApplication.activeWindow() is not None:
             return
-        if recheck:
-            QTimer.singleShot(250, lambda: self._close_if_unfocused(recheck=False))
+        try:
+            focused = get_focused_window()
+        except Exception:
+            focused = None
+        if focused and focused.get("title") == self.windowTitle():
+            return
+        self._unfocused_checks += 1
+        if self._unfocused_checks < 5:
+            QTimer.singleShot(200, self._close_if_unfocused)
         else:
             self.close()
