@@ -174,6 +174,102 @@ def has_app_shortcuts(app_name: str) -> bool:
     return bool(data and data.get("shortcuts"))
 
 
+def _get_topics_path() -> Path:
+    """Return the path to the topics.json file."""
+    return get_data_dir() / "topics.json"
+
+
+def get_topics() -> Dict[str, List[Dict[str, str]]]:
+    """
+    Get all user-defined topics and their key/value entries.
+
+    Returns:
+        Dictionary mapping topic name to a list of entries.
+        Format:
+        {
+            "git": [{"key": "compare to origin main", "value": "git diff origin/main..."}],
+            ...
+        }
+    """
+    topics_path = _get_topics_path()
+    if not topics_path.exists():
+        return {}
+    try:
+        with open(topics_path, 'r') as f:
+            data = json.load(f)
+            return data.get("topics", {})
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"Error loading topics: {e}")
+        return {}
+
+
+def save_topics(topics: Dict[str, List[Dict[str, str]]]) -> None:
+    """
+    Save the full topics mapping.
+
+    Args:
+        topics: Dictionary mapping topic name to a list of
+                {"key": str, "value": str} entries.
+    """
+    topics_path = _get_topics_path()
+    topics_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(topics_path, 'w') as f:
+        json.dump({"topics": topics}, f, indent=2)
+
+
+def add_topic(name: str) -> bool:
+    """Add an empty topic. Returns False if it already exists or the name is blank."""
+    name = name.strip()
+    if not name:
+        return False
+    topics = get_topics()
+    if name in topics:
+        return False
+    topics[name] = []
+    save_topics(topics)
+    return True
+
+
+def delete_topic(name: str) -> bool:
+    """Delete a topic and all its entries. Returns False if it didn't exist."""
+    topics = get_topics()
+    if name not in topics:
+        return False
+    del topics[name]
+    save_topics(topics)
+    return True
+
+
+def add_topic_entry(topic: str, key: str, value: str) -> bool:
+    """Append a key/value entry to a topic. Returns False if the topic doesn't exist."""
+    topics = get_topics()
+    if topic not in topics:
+        return False
+    topics[topic].append({"key": key, "value": value})
+    save_topics(topics)
+    return True
+
+
+def update_topic_entry(topic: str, index: int, key: str, value: str) -> bool:
+    """Replace the entry at index in a topic. Returns False if out of range."""
+    topics = get_topics()
+    if topic not in topics or not (0 <= index < len(topics[topic])):
+        return False
+    topics[topic][index] = {"key": key, "value": value}
+    save_topics(topics)
+    return True
+
+
+def delete_topic_entry(topic: str, index: int) -> bool:
+    """Delete the entry at index in a topic. Returns False if out of range."""
+    topics = get_topics()
+    if topic not in topics or not (0 <= index < len(topics[topic])):
+        return False
+    del topics[topic][index]
+    save_topics(topics)
+    return True
+
+
 def get_default_shortcuts() -> Optional[Dict]:
     """
     Get the default Ubuntu shortcuts.

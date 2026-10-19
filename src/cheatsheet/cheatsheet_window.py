@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 
 from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, has_app_shortcuts, save_app_shortcuts, save_font_size
 from src.platform import get_focused_window, get_corner_position
+from src.notes.notes_window import NotesWindow
 from src.settings.settings_window import SettingsWindow
 
 DARK_THEME = """
@@ -84,6 +85,7 @@ class CheatsheetWindow(QMainWindow):
         self._initial_move_done = False
         self._font_size = get_font_size()
         self._settings_window = None
+        self._notes_window = None
 
         self.central = QWidget()
         self.central.setObjectName("central_widget")
@@ -144,6 +146,8 @@ class CheatsheetWindow(QMainWindow):
         our_titles = {self.windowTitle()}
         if self._settings_window:
             our_titles.add(self._settings_window.windowTitle())
+        if self._notes_window:
+            our_titles.add(self._notes_window.windowTitle())
         if focused.get("title") in our_titles:
             return
 
@@ -241,6 +245,8 @@ class CheatsheetWindow(QMainWindow):
             self._move_to_corner()
         elif key == Qt.Key.Key_S and not ctrl:
             self._open_settings()
+        elif key == Qt.Key.Key_N and not ctrl:
+            self._open_notes()
         else:
             super().keyPressEvent(event)
 
@@ -281,6 +287,16 @@ class CheatsheetWindow(QMainWindow):
         self._settings_window.shortcuts_saved.connect(self._on_shortcuts_saved)
         self._settings_window.app_deleted.connect(self._on_app_deleted)
         self._settings_window.show()
+
+    def _open_notes(self):
+        if self._notes_window and self._notes_window.isVisible():
+            self._notes_window.raise_()
+            self._notes_window.activateWindow()
+            return
+        self._notes_window = NotesWindow()
+        self._notes_window.show()
+        self._notes_window.raise_()
+        self._notes_window.activateWindow()
 
     def handle_second_instance(self, focused_app):
         """Handle a second instance's toggle request."""
@@ -349,4 +365,6 @@ class CheatsheetWindow(QMainWindow):
         """Close the settings window when the cheatsheet window is closed."""
         if self._settings_window and self._settings_window.isVisible():
             self._settings_window.close()
+        if self._notes_window and self._notes_window.isVisible():
+            self._notes_window.close()
         super().closeEvent(event)
