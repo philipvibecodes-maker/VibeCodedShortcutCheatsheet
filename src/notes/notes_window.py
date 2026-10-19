@@ -412,6 +412,15 @@ class NotesWindow(QMainWindow):
         # Widgets that don't inherit the window font need it set directly
         self.table.horizontalHeader().setFont(font)
 
+    def keyPressEvent(self, event):
+        if (
+            event.key() == Qt.Key.Key_Slash
+            and not isinstance(self.focusWidget(), (QLineEdit, QPlainTextEdit))
+        ):
+            self.search_edit.setFocus()
+            return
+        super().keyPressEvent(event)
+
     # --- window behavior --------------------------------------------------
 
     def showEvent(self, event):
