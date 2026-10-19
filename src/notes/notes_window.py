@@ -302,13 +302,13 @@ class NotesWindow(QMainWindow):
             for i, e in enumerate(all_topics.get(topic, [])):
                 rows.append((topic, i, e["key"], e["value"]))
 
-        top_left = int(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        cell_align = int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         for row, (topic, index, key, value) in enumerate(rows):
             self.table.insertRow(row)
             cells = [topic, key, value] if searching else [key, value]
             for col, text in enumerate(cells):
                 item = QTableWidgetItem(text)
-                item.setTextAlignment(top_left)
+                item.setTextAlignment(cell_align)
                 if col == 0:
                     item.setData(Qt.ItemDataRole.UserRole, (topic, index))
                 self.table.setItem(row, col, item)
