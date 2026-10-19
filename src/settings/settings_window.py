@@ -281,7 +281,7 @@ class SettingsWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
 
         if app_name:
-            index = self.app_combo.findData((app_name, None))
+            index = self._find_index(app_name)
             if index >= 0:
                 self.app_combo.setCurrentIndex(index)
             self._load_shortcuts(app_name)
@@ -328,7 +328,7 @@ class SettingsWindow(QMainWindow):
         save_app_shortcuts(app_name, [])
         self._new_apps.add(app_name)
         self.app_combo.addItem(app_name, (app_name, None))
-        index = self.app_combo.findData((app_name, None))
+        index = self._find_index(app_name)
         self.app_combo.setCurrentIndex(index)
 
     def _add_tab(self):
@@ -376,10 +376,7 @@ class SettingsWindow(QMainWindow):
         if not any(t.get("pattern") == pattern for t in get_tab_profiles(app_name)):
             save_tab_shortcuts(app_name, pattern, [])
             self._new_tabs.add((app_name, pattern))
-            self._rebuild_app_combo()
-        index = self.app_combo.findData((app_name, pattern))
-        if index >= 0:
-            self.app_combo.setCurrentIndex(index)
+        self._rebuild_app_combo(select=(app_name, pattern))
 
     def _delete_app(self):
         if not self._app_name:
@@ -403,10 +400,7 @@ class SettingsWindow(QMainWindow):
             app_name = self._app_name
             self._new_tabs.discard((app_name, self._tab_pattern))
             delete_tab_shortcuts(app_name, self._tab_pattern)
-            self._rebuild_app_combo()
-            index = self.app_combo.findData((app_name, None))
-            if index >= 0:
-                self.app_combo.setCurrentIndex(index)
+            self._rebuild_app_combo(select=(app_name, None))
             self.shortcuts_saved.emit(app_name)
             return
 
@@ -425,16 +419,36 @@ class SettingsWindow(QMainWindow):
                 label = f"{data.get('display_name', app_name)} — tab: {tab.get('display_name', pattern)}"
                 self.app_combo.addItem(label, (app_name, pattern))
 
-    def _rebuild_app_combo(self):
-        """Repopulate the combo preserving the current selection."""
-        current = (self._app_name, self._tab_pattern)
+    def _find_index(self, app_name, pattern=None):
+        """Index of the combo entry for an app or tab profile, or -1.
+
+        Loops instead of findData(): Qt can't compare the tuple itemData
+        reliably, so entries are matched element-wise.
+        """
+        for i in range(self.app_combo.count()):
+            entry = self.app_combo.itemData(i)
+            if entry and tuple(entry) == (app_name, pattern):
+                return i
+        return -1
+
+    def _rebuild_app_combo(self, select=None):
+        """Repopulate the combo and select the given (app, pattern) entry.
+
+        Defaults to preserving the current selection; falls back to the first
+        entry when the requested one is gone, and always reloads the table.
+        """
+        if select is None:
+            select = (self._app_name, self._tab_pattern)
         self.app_combo.blockSignals(True)
         self.app_combo.clear()
         self._populate_app_combo()
         self.app_combo.blockSignals(False)
-        index = self.app_combo.findData(current)
+        index = self._find_index(*select)
+        if index < 0 and self.app_combo.count():
+            index = 0
         if index >= 0:
             self.app_combo.setCurrentIndex(index)
+            self._on_app_changed(index)
 
     def _on_app_changed(self, index):
         if index < 0:

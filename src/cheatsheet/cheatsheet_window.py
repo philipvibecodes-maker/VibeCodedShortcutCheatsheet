@@ -318,7 +318,7 @@ class CheatsheetWindow(QMainWindow):
         if app_name and not has_app_shortcuts(app_name):
             self._settings_window._add_app(app_name)
         elif app_name:
-            index = self._settings_window.app_combo.findData((app_name, None))
+            index = self._settings_window._find_index(app_name)
             if index >= 0:
                 self._settings_window.app_combo.setCurrentIndex(index)
 
