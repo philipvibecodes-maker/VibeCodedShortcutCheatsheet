@@ -1,7 +1,11 @@
 """Shared pytest fixtures."""
 
+import os
 import sys
 from pathlib import Path
+
+# Run Qt offscreen so tests never need a real display or focused windows.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 # Make `src` imports work from anywhere in the suite
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

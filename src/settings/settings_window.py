@@ -315,9 +315,9 @@ class SettingsWindow(QMainWindow):
     def _add_app(self, app_name):
         save_app_shortcuts(app_name, [])
         self._new_apps.add(app_name)
-        self.app_combo.addItem(app_name, app_name)
-        index = self.app_combo.findData(app_name)
-        self.app_combo.setCurrentIndex(index)
+        if self.app_combo.findData(app_name) < 0:
+            self.app_combo.addItem(app_name, app_name)
+        self.app_combo.setCurrentIndex(self.app_combo.findData(app_name))
 
     def _delete_app(self):
         if not self._app_name:
