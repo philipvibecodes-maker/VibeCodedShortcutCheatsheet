@@ -158,6 +158,17 @@ class MultiLineEditDelegate(QStyledItemDelegate):
         editor.installEventFilter(self)
         return editor
 
+    def updateEditorGeometry(self, editor, option, index):
+        # Rows are ResizeToContents (~1 line for short values); stretch the
+        # editor downward over the rows below so multi-line editing is visible.
+        rect = option.rect
+        wanted = editor.fontMetrics().lineSpacing() * 4 + 12
+        if rect.height() < wanted:
+            table = self.parent()
+            bottom = table.viewport().rect().bottom() if table else rect.bottom()
+            rect.setBottom(min(rect.top() + wanted, bottom))
+        editor.setGeometry(rect)
+
     def eventFilter(self, obj, event):
         if (
             isinstance(obj, QPlainTextEdit)
