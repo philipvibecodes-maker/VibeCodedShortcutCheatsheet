@@ -1,3 +1,5 @@
+import time
+
 from PyQt6.QtCore import Qt, QTimer, QRect
 from PyQt6.QtGui import QPainter, QColor, QFont
 from PyQt6.QtWidgets import (
@@ -300,6 +302,10 @@ class CheatsheetWindow(QMainWindow):
 
     def toggle_notes(self):
         """Toggle the notes window (bound to the global Ctrl+Shift+\\ hotkey)."""
+        now = time.monotonic()
+        if now - getattr(self, "_last_notes_toggle", 0) < 0.4:
+            return  # ignore duplicate firings (double-bound hotkey, key repeat)
+        self._last_notes_toggle = now
         if self._notes_window and self._notes_window.isVisible():
             self._notes_window.close()
         else:

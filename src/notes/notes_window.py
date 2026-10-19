@@ -210,8 +210,6 @@ class NotesWindow(QMainWindow):
         layout.addLayout(buttons)
 
         QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
-        # Fallback close if the global Ctrl+Shift+\ registration failed
-        QShortcut(QKeySequence("Ctrl+Shift+\\"), self, activated=self.close)
         QShortcut(QKeySequence("Ctrl+="), self, activated=lambda: self._change_font_size(1))
         QShortcut(QKeySequence("Ctrl++"), self, activated=lambda: self._change_font_size(1))
         QShortcut(QKeySequence("Ctrl+-"), self, activated=lambda: self._change_font_size(-1))

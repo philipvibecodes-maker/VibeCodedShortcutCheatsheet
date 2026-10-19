@@ -57,13 +57,24 @@ def _free_path(existing: list) -> str:
 
 
 def register_notes_hotkey() -> None:
-    """Idempotently register the Ctrl+Shift+\\ global keybinding."""
+    """Idempotently register the Ctrl+Shift+\\ global keybinding.
+
+    Dedupes by keybinding name so a stale copy (e.g. pointing at a
+    different python/venv path) can't double-fire the toggle.
+    """
     command = toggle_command()
     paths = _custom_paths()
-    for path in paths:
-        existing = _gsettings("get", f"{_SCHEMA}.custom-keybinding:{path}", "command")
-        if existing.strip("'") == command:
-            return  # already registered
+    ours = [p for p in paths if _gsettings("get", f"{_SCHEMA}.custom-keybinding:{p}", "name").strip("'") == _NAME]
+    if ours:
+        keep = ours[0]
+        schema = f"{_SCHEMA}.custom-keybinding:{keep}"
+        _gsettings("set", schema, "command", command)
+        _gsettings("set", schema, "binding", _BINDING)
+        extra = set(ours[1:])
+        remaining = [p for p in paths if p not in extra]
+        if len(remaining) != len(paths):
+            _write_path_list(remaining)
+        return
     path = _free_path(paths)
     schema = f"{_SCHEMA}.custom-keybinding:{path}"
     _gsettings("set", schema, "name", _NAME)
