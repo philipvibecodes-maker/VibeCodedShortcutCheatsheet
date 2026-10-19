@@ -298,6 +298,13 @@ class CheatsheetWindow(QMainWindow):
         self._notes_window.raise_()
         self._notes_window.activateWindow()
 
+    def toggle_notes(self):
+        """Toggle the notes window (bound to the global Ctrl+Shift+\\ hotkey)."""
+        if self._notes_window and self._notes_window.isVisible():
+            self._notes_window.close()
+        else:
+            self._open_notes()
+
     def handle_second_instance(self, focused_app):
         """Handle a second instance's toggle request."""
         if self.isVisible():
