@@ -328,7 +328,7 @@ class SettingsWindow(QMainWindow):
         save_app_shortcuts(app_name, [])
         self._new_apps.add(app_name)
         if self._find_index(app_name) < 0:
-            self.app_combo.addItem(app_name, (app_name, None))
+            self.app_combo.addItem(app_name, app_name)
         self.app_combo.setCurrentIndex(self._find_index(app_name))
 
     def _add_tab(self):
@@ -413,7 +413,7 @@ class SettingsWindow(QMainWindow):
     def _populate_app_combo(self):
         all_shortcuts = get_all_shortcuts()
         for app_name, data in sorted(all_shortcuts.items(), key=lambda x: x[1].get("display_name", x[0])):
-            self.app_combo.addItem(data.get("display_name", app_name), (app_name, None))
+            self.app_combo.addItem(data.get("display_name", app_name), app_name)
             for tab in data.get("tabs", []):
                 pattern = tab.get("pattern", "")
                 label = f"{data.get('display_name', app_name)} — tab: {tab.get('display_name', pattern)}"
@@ -427,7 +427,10 @@ class SettingsWindow(QMainWindow):
         """
         for i in range(self.app_combo.count()):
             entry = self.app_combo.itemData(i)
-            if entry and tuple(entry) == (app_name, pattern):
+            if isinstance(entry, tuple):
+                if tuple(entry) == (app_name, pattern):
+                    return i
+            elif pattern is None and entry == app_name:
                 return i
         return -1
 
@@ -456,7 +459,10 @@ class SettingsWindow(QMainWindow):
         entry = self.app_combo.itemData(index)
         if not entry:
             return
-        app_name, pattern = entry
+        if isinstance(entry, tuple):
+            app_name, pattern = entry
+        else:
+            app_name, pattern = entry, None
         self._load_shortcuts(app_name, pattern)
 
     def _load_shortcuts(self, app_name, pattern=None):

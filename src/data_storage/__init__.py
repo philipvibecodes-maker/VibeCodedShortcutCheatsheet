@@ -171,7 +171,11 @@ def delete_app_shortcuts(app_name: str) -> bool:
 def has_app_shortcuts(app_name: str) -> bool:
     """Check whether the given application has at least one recorded shortcut."""
     data = get_app_shortcuts(app_name)
-    return bool(data and data.get("shortcuts"))
+    if not data:
+        return False
+    if data.get("shortcuts"):
+        return True
+    return any(t.get("shortcuts") for t in data.get("tabs", []))
 
 
 def get_tab_profiles(app_name: str) -> List[Dict]:
