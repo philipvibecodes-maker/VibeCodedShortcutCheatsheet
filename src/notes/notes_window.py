@@ -305,6 +305,8 @@ class NotesWindow(QMainWindow):
         cell_align = int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         for row, (topic, index, key, value) in enumerate(rows):
             self.table.insertRow(row)
+            # trailing newlines would make the centered text look top-aligned
+            value = value.rstrip("\n")
             cells = [topic, key, value] if searching else [key, value]
             for col, text in enumerate(cells):
                 item = QTableWidgetItem(text)
