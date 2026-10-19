@@ -96,33 +96,44 @@ def _get_config_path() -> Path:
     return get_data_dir() / "config.json"
 
 
-def get_font_size() -> int:
-    """Get the stored font size, defaulting to 12."""
+def _get_config() -> Dict:
     config_path = _get_config_path()
     if config_path.exists():
         try:
             with open(config_path, 'r') as f:
-                config = json.load(f)
-                return config.get("font_size", 12)
+                return json.load(f)
         except (json.JSONDecodeError, IOError):
             pass
-    return 12
+    return {}
 
 
-def save_font_size(size: int) -> None:
-    """Save font size to config.json, preserving other config values."""
+def _save_config_value(key: str, value) -> None:
     config_path = _get_config_path()
-    config = {}
-    if config_path.exists():
-        try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
-    config["font_size"] = size
+    config = _get_config()
+    config[key] = value
     config_path.parent.mkdir(parents=True, exist_ok=True)
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
+
+
+def get_font_size() -> int:
+    """Get the stored cheatsheet font size, defaulting to 12."""
+    return _get_config().get("font_size", 12)
+
+
+def save_font_size(size: int) -> None:
+    """Save the cheatsheet font size to config.json, preserving other values."""
+    _save_config_value("font_size", size)
+
+
+def get_notes_font_size() -> int:
+    """Get the stored notes-window font size, defaulting to 12."""
+    return _get_config().get("notes_font_size", 12)
+
+
+def save_notes_font_size(size: int) -> None:
+    """Save the notes-window font size to config.json, preserving other values."""
+    _save_config_value("notes_font_size", size)
 
 
 def save_app_shortcuts(app_name: str, shortcuts: List[Dict[str, str]]) -> None:

@@ -1,7 +1,7 @@
 """Large centered window for recording and searching key/value notes under topics."""
 
 from PyQt6.QtCore import QEvent, Qt, QTimer
-from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtGui import QFont, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
@@ -29,7 +29,9 @@ from src.data_storage import (
     delete_topic,
     delete_topic_entry,
     get_all_shortcuts,
+    get_notes_font_size,
     get_topics,
+    save_notes_font_size,
     update_topic_entry,
 )
 
@@ -156,6 +158,7 @@ class NotesWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Notes")
         self.setStyleSheet(DARK_THEME)
+        self._font_size = get_notes_font_size()
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -207,12 +210,16 @@ class NotesWindow(QMainWindow):
         layout.addLayout(buttons)
 
         QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
+        QShortcut(QKeySequence("Ctrl+="), self, activated=lambda: self._change_font_size(1))
+        QShortcut(QKeySequence("Ctrl++"), self, activated=lambda: self._change_font_size(1))
+        QShortcut(QKeySequence("Ctrl+-"), self, activated=lambda: self._change_font_size(-1))
         QShortcut(QKeySequence("Ctrl+T"), self, activated=self._new_topic)
         QShortcut(QKeySequence("Ctrl+N"), self, activated=self._new_entry)
         QShortcut(QKeySequence("F2"), self, activated=self._edit_entry)
         QShortcut(QKeySequence("Delete"), self, activated=self._on_delete_key)
         QShortcut(QKeySequence("Return"), self.table, activated=self._edit_entry)
 
+        self._apply_font_size()
         self._refresh_topics()
 
     # --- data helpers -----------------------------------------------------
@@ -374,6 +381,21 @@ class NotesWindow(QMainWindow):
             self._delete_entry()
         elif self.topic_list.hasFocus():
             self._delete_topic()
+
+    def _change_font_size(self, delta):
+        new_size = self._font_size + delta
+        if new_size < 8 or new_size > 24:
+            return
+        self._font_size = new_size
+        save_notes_font_size(new_size)
+        self._apply_font_size()
+
+    def _apply_font_size(self):
+        font = QFont(self.font())
+        font.setPointSize(self._font_size)
+        self.setFont(font)
+        # Widgets that don't inherit the window font need it set directly
+        self.table.horizontalHeader().setFont(font)
 
     # --- window behavior --------------------------------------------------
 
