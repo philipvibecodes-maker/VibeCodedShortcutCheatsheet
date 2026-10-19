@@ -230,6 +230,9 @@ class NotesWindow(QMainWindow):
         QShortcut(QKeySequence("Delete"), self, activated=self._on_delete_key)
         QShortcut(QKeySequence("Return"), self.table, activated=self._edit_entry)
 
+        self.topic_list.installEventFilter(self)
+        self.table.installEventFilter(self)
+
         self._apply_font_size()
         self._refresh_topics()
 
@@ -411,6 +414,17 @@ class NotesWindow(QMainWindow):
         self.setFont(font)
         # Widgets that don't inherit the window font need it set directly
         self.table.horizontalHeader().setFont(font)
+
+    def eventFilter(self, obj, event):
+        # Item views consume '/' for their own keyboard search; intercept it
+        # to focus the search bar instead.
+        if (
+            event.type() == QEvent.Type.KeyPress
+            and event.key() == Qt.Key.Key_Slash
+        ):
+            self.search_edit.setFocus()
+            return True
+        return super().eventFilter(obj, event)
 
     def keyPressEvent(self, event):
         if (
