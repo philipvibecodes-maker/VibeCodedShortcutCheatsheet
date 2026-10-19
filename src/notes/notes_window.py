@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QSplitter,
+    QStyledItemDelegate,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -149,6 +150,33 @@ class EntryDialog(QDialog):
         return self.key_edit.text().strip(), self.value_edit.toPlainText()
 
 
+class MultiLineEditDelegate(QStyledItemDelegate):
+    """In-place multi-line editor for the value column (Ctrl+Return commits)."""
+
+    def createEditor(self, parent, option, index):
+        editor = QPlainTextEdit(parent)
+        editor.installEventFilter(self)
+        return editor
+
+    def eventFilter(self, obj, event):
+        if (
+            isinstance(obj, QPlainTextEdit)
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+        ):
+            self.commitData.emit(obj)
+            self.closeEditor.emit(obj)
+            return True
+        return super().eventFilter(obj, event)
+
+    def setEditorData(self, editor, index):
+        editor.setPlainText(str(index.data() or ""))
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.toPlainText())
+
+
 class NotesWindow(QMainWindow):
     """Topic/notes browser: search, record, and edit key/value pairs per topic.
 
@@ -186,7 +214,11 @@ class NotesWindow(QMainWindow):
         splitter.addWidget(self.topic_list)
 
         self.table = QTableWidget()
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._multiline_delegate = MultiLineEditDelegate(self.table)
+        self.table.setEditTriggers(
+            QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.EditKeyPressed
+        )
+        self.table.itemChanged.connect(self._on_item_changed)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setWordWrap(True)
         self.table.verticalHeader().setVisible(False)
@@ -228,7 +260,10 @@ class NotesWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+N"), self, activated=self._new_entry)
         QShortcut(QKeySequence("F2"), self, activated=self._edit_entry)
         QShortcut(QKeySequence("Delete"), self, activated=self._on_delete_key)
-        QShortcut(QKeySequence("Return"), self.table, activated=self._edit_entry)
+        QShortcut(
+            QKeySequence("Return"), self.table,
+            activated=lambda: self.table.edit(self.table.currentIndex()),
+        )
 
         self.topic_list.installEventFilter(self)
         self.table.installEventFilter(self)
@@ -306,17 +341,22 @@ class NotesWindow(QMainWindow):
                 rows.append((topic, i, e["key"], e["value"]))
 
         cell_align = int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        self._populating = True
         for row, (topic, index, key, value) in enumerate(rows):
             self.table.insertRow(row)
             # trailing newlines would make the centered text look top-aligned
             value = value.rstrip("\n")
             cells = [topic, key, value] if searching else [key, value]
+            editable = not self._is_readonly_topic(topic)
             for col, text in enumerate(cells):
                 item = QTableWidgetItem(text)
                 item.setTextAlignment(cell_align)
                 if col == 0:
                     item.setData(Qt.ItemDataRole.UserRole, (topic, index))
+                if not editable or (searching and col == 0):
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, col, item)
+        self._populating = False
 
         header = self.table.horizontalHeader()
         if searching:
@@ -326,6 +366,12 @@ class NotesWindow(QMainWindow):
         else:
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
             header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+
+        # multi-line editor on the value column (plain default elsewhere)
+        value_col = 2 if searching else 1
+        self.table.setItemDelegateForColumn(0, QStyledItemDelegate(self.table))
+        self.table.setItemDelegateForColumn(1, self._multiline_delegate if not searching else QStyledItemDelegate(self.table))
+        self.table.setItemDelegateForColumn(value_col, self._multiline_delegate)
 
         self.table.resizeRowsToContents()
 
@@ -380,12 +426,28 @@ class NotesWindow(QMainWindow):
         topic, index = self._selected_entry()
         if topic is None:
             return
-        entry = get_topics()[topic][index]
-        dialog = EntryDialog(self, key=entry["key"], value=entry["value"], title=f"Edit entry — {topic}")
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            key, value = dialog.result()
-            update_topic_entry(topic, index, key, value)
-            self._refresh_topics(select=topic)
+        # open the in-place editor on the key cell of the selected row
+        col = 1 if self.table.columnCount() == 3 else 0
+        self.table.edit(self.table.model().index(self.table.currentRow(), col))
+
+    def _on_item_changed(self, item):
+        """Persist in-place cell edits to topics.json."""
+        if getattr(self, "_populating", False):
+            return
+        data_item = self.table.item(item.row(), 0)
+        if not data_item:
+            return
+        topic, index = data_item.data(Qt.ItemDataRole.UserRole)
+        if self._is_readonly_topic(topic):
+            return
+        if self.table.columnCount() == 3:
+            key = self.table.item(item.row(), 1).text()
+            value = self.table.item(item.row(), 2).text()
+        else:
+            key = self.table.item(item.row(), 0).text()
+            value = self.table.item(item.row(), 1).text()
+        update_topic_entry(topic, index, key, value)
+        self.table.resizeRowToContents(item.row())
 
     def _delete_entry(self):
         topic, index = self._selected_entry()
