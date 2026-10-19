@@ -188,7 +188,9 @@ class NotesWindow(QMainWindow):
         self.table = QTableWidget()
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setWordWrap(True)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         splitter.addWidget(self.table)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 3)
@@ -319,6 +321,8 @@ class NotesWindow(QMainWindow):
         else:
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
             header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+
+        self.table.resizeRowsToContents()
 
         readonly = self._is_readonly_topic(self._current_topic()) or searching
         self.new_entry_btn.setEnabled(not readonly)
