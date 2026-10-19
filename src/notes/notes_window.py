@@ -157,6 +157,14 @@ class NotesWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Notes")
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowSystemMenuHint
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+            | Qt.WindowType.WindowCloseButtonHint
+        )
         self.setStyleSheet(DARK_THEME)
         self._font_size = get_notes_font_size()
 
@@ -412,9 +420,15 @@ class NotesWindow(QMainWindow):
     def changeEvent(self, event):
         super().changeEvent(event)
         if event.type() == QEvent.Type.ActivationChange and not self.isActiveWindow():
-            QTimer.singleShot(0, self._close_if_unfocused)
+            QTimer.singleShot(250, self._close_if_unfocused)
 
-    def _close_if_unfocused(self):
+    def _close_if_unfocused(self, recheck=True):
         # Close when focus left the app entirely; ignore our own modal dialogs.
-        if QApplication.activeWindow() is None:
+        # Activation flickers briefly during maximize/move on GNOME, so require
+        # the unfocused state to persist across two checks before closing.
+        if QApplication.activeWindow() is not None:
+            return
+        if recheck:
+            QTimer.singleShot(250, lambda: self._close_if_unfocused(recheck=False))
+        else:
             self.close()
