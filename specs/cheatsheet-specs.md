@@ -37,3 +37,8 @@ Make sure to
   Relevant documentation:
   https://doc.qt.io/qtforpython-6/
   https://www.riverbankcomputing.com/static/Docs/PyQt6/
+
+## Tab-specific shortcut profiles
+- An app profile may carry `tabs`: a list of `{"pattern", "display_name", "shortcuts"}` entries.
+- When the focused window's title contains a tab pattern (case-insensitive substring; longest pattern wins), the cheatsheet shows that tab profile's shortcuts instead of the app profile's.
+- This is meant for browsers: one `brave-browser`/`chrome.exe` profile plus per-tab profiles for sites like GitHub or Gmail.

@@ -69,3 +69,71 @@ def test_font_size_default_and_roundtrip(temp_data_dir):
     assert data_storage.get_font_size() == 12
     data_storage.save_font_size(18)
     assert data_storage.get_font_size() == 18
+
+
+def test_tab_profiles_empty(temp_data_dir):
+    assert data_storage.get_tab_profiles("brave-browser") == []
+    assert data_storage.get_tab_profiles("does-not-exist") == []
+
+
+def test_save_and_get_tab_shortcuts(temp_data_dir):
+    data_storage.save_tab_shortcuts(
+        "brave-browser", "GitHub",
+        [{"keys": "?", "description": "Show shortcuts"}],
+    )
+    tab = data_storage.get_tab_shortcuts(
+        "brave-browser", "philipvibecodes-maker/MathCompile: GitHub - Brave"
+    )
+    assert tab is not None
+    assert tab["pattern"] == "GitHub"
+    assert tab["shortcuts"][0]["keys"] == "?"
+
+
+def test_tab_match_is_case_insensitive_substring(temp_data_dir):
+    data_storage.save_tab_shortcuts("brave-browser", "gmail", [])
+    assert data_storage.get_tab_shortcuts("brave-browser", "Inbox - GMAIL - Brave") is not None
+    assert data_storage.get_tab_shortcuts("brave-browser", "Other site - Brave") is None
+
+
+def test_tab_match_longest_pattern_wins(temp_data_dir):
+    data_storage.save_tab_shortcuts("brave-browser", "GitHub",
+        [{"keys": "?", "description": "generic"}])
+    data_storage.save_tab_shortcuts("brave-browser", "GitHub Issues",
+        [{"keys": "c", "description": "specific"}])
+    tab = data_storage.get_tab_shortcuts("brave-browser", "GitHub Issues - Brave")
+    assert tab["shortcuts"][0]["description"] == "specific"
+
+
+def test_tab_shortcuts_empty_title(temp_data_dir):
+    data_storage.save_tab_shortcuts("brave-browser", "GitHub", [])
+    assert data_storage.get_tab_shortcuts("brave-browser", "") is None
+    assert data_storage.get_tab_shortcuts("brave-browser", None) is None
+
+
+def test_save_tab_shortcuts_updates_existing(temp_data_dir):
+    data_storage.save_tab_shortcuts("brave-browser", "GitHub", [{"keys": "a", "description": "x"}])
+    data_storage.save_tab_shortcuts("brave-browser", "GitHub", [{"keys": "b", "description": "y"}])
+    tabs = data_storage.get_tab_profiles("brave-browser")
+    assert len(tabs) == 1
+    assert tabs[0]["shortcuts"][0]["keys"] == "b"
+
+
+def test_save_tab_shortcuts_preserves_app_shortcuts(temp_data_dir):
+    data_storage.save_tab_shortcuts("brave-browser", "GitHub", [])
+    data = data_storage.get_app_shortcuts("brave-browser")
+    assert data["shortcuts"][0]["keys"] == "Ctrl+T"
+    assert data["tabs"][0]["pattern"] == "GitHub"
+
+
+def test_save_tab_shortcuts_creates_app_file(temp_data_dir):
+    data_storage.save_tab_shortcuts("newapp", "sometab",
+        [{"keys": "x", "description": "y"}])
+    assert data_storage.has_app_shortcuts("newapp")
+    assert data_storage.get_tab_shortcuts("newapp", "sometab - Browser") is not None
+
+
+def test_delete_tab_shortcuts(temp_data_dir):
+    data_storage.save_tab_shortcuts("brave-browser", "GitHub", [])
+    assert data_storage.delete_tab_shortcuts("brave-browser", "GitHub") is True
+    assert data_storage.delete_tab_shortcuts("brave-browser", "GitHub") is False
+    assert data_storage.get_tab_profiles("brave-browser") == []

@@ -15,15 +15,15 @@ from src.platform import get_focused_window, is_platform_supported
 SERVER_NAME = "ShortcutCheatsheet"
 
 
-def get_focused_app_name():
-    """Get the currently focused app name, or None."""
+def get_focused_window_info():
+    """Get the currently focused window's app name and title, or (None, None)."""
     try:
         focused = get_focused_window()
         if focused:
-            return focused.get("wm_class")
+            return focused.get("wm_class"), focused.get("title")
     except Exception:
         pass
-    return None
+    return None, None
 
 
 def try_send_toggle():
@@ -31,8 +31,8 @@ def try_send_toggle():
     socket = QLocalSocket()
     socket.connectToServer(SERVER_NAME)
     if socket.waitForConnected(500):
-        focused_app = get_focused_app_name()
-        msg = json.dumps({"action": "toggle", "focused_app": focused_app or ""})
+        focused_app, focused_title = get_focused_window_info()
+        msg = json.dumps({"action": "toggle", "focused_app": focused_app or "", "focused_title": focused_title or ""})
         socket.write(msg.encode())
         socket.waitForBytesWritten(500)
         socket.disconnectFromServer()
@@ -69,7 +69,7 @@ def main():
             try:
                 msg = json.loads(data)
                 if msg.get("action") == "toggle":
-                    window.handle_second_instance(msg.get("focused_app", ""))
+                    window.handle_second_instance(msg.get("focused_app", ""), msg.get("focused_title", ""))
             except (json.JSONDecodeError, ValueError):
                 pass
 

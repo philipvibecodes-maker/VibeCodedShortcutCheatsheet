@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, has_app_shortcuts, save_app_shortcuts, save_font_size
+from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, get_tab_shortcuts, has_app_shortcuts, save_app_shortcuts, save_font_size
 from src.platform import get_focused_window, get_corner_position
 from src.settings.settings_window import SettingsWindow
 
@@ -79,6 +79,7 @@ class CheatsheetWindow(QMainWindow):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setStyleSheet(DARK_THEME)
         self._current_app = None
+        self._current_title = None
         self._corner_v = "top"
         self._corner_h = "right"
         self._initial_move_done = False
@@ -112,8 +113,10 @@ class CheatsheetWindow(QMainWindow):
                 app_name = focused.get("wm_class")
                 if app_name:
                     self._current_app = app_name
-                    if has_app_shortcuts(app_name):
-                        self._display_shortcuts(get_app_shortcuts(app_name))
+                    self._current_title = focused.get("title")
+                    data = self._resolve_shortcuts(app_name, self._current_title)
+                    if data:
+                        self._display_shortcuts(data)
                     else:
                         self._started_hidden = True
         except Exception:
@@ -146,20 +149,33 @@ class CheatsheetWindow(QMainWindow):
             return
 
         focused_app = focused.get("wm_class")
-        if focused_app == self._current_app:
+        focused_title = focused.get("title")
+        if focused_app == self._current_app and focused_title == self._current_title:
             return
 
         self._current_app = focused_app
+        self._current_title = focused_title
 
-        if focused_app and has_app_shortcuts(focused_app):
-            data = get_app_shortcuts(focused_app)
-            if data:
-                if self.isHidden():
-                    self.show()
-                self.raise_()
-                self._display_shortcuts(data)
+        data = self._resolve_shortcuts(focused_app, focused_title)
+        if data:
+            if self.isHidden():
+                self.show()
+            self.raise_()
+            self._display_shortcuts(data)
         else:
             self.hide()
+
+    @staticmethod
+    def _resolve_shortcuts(app_name, title):
+        """Pick the profile to show: a matching tab profile, else the app profile."""
+        if not app_name:
+            return None
+        tab = get_tab_shortcuts(app_name, title or "")
+        if tab and tab.get("shortcuts"):
+            return tab
+        if has_app_shortcuts(app_name):
+            return get_app_shortcuts(app_name)
+        return None
 
     def _display_shortcuts(self, data):
         if not data:
@@ -275,31 +291,34 @@ class CheatsheetWindow(QMainWindow):
             self._settings_window.activateWindow()
             return
 
-        self._settings_window = SettingsWindow(app_name=self._current_app or "default")
+        self._settings_window = SettingsWindow(
+            app_name=self._current_app or "default",
+            focused_title=self._current_title,
+        )
         self._settings_window.shortcuts_saved.connect(self._on_shortcuts_saved)
         self._settings_window.app_deleted.connect(self._on_app_deleted)
         self._settings_window.show()
 
-    def handle_second_instance(self, focused_app):
+    def handle_second_instance(self, focused_app, focused_title=None):
         """Handle a second instance's toggle request."""
         if self.isVisible():
             QApplication.quit()
         else:
-            self._open_settings_for_new_app(focused_app)
+            self._open_settings_for_new_app(focused_app, focused_title)
 
-    def _open_settings_for_new_app(self, app_name):
+    def _open_settings_for_new_app(self, app_name, focused_title=None):
         """Open settings window pre-set to add shortcuts for the given app."""
         if self._settings_window and self._settings_window.isVisible():
             self._settings_window.close()
 
-        self._settings_window = SettingsWindow()
+        self._settings_window = SettingsWindow(focused_title=focused_title)
         self._settings_window.shortcuts_saved.connect(self._on_shortcuts_saved)
         self._settings_window.app_deleted.connect(self._on_app_deleted)
 
         if app_name and not has_app_shortcuts(app_name):
             self._settings_window._add_app(app_name)
         elif app_name:
-            index = self._settings_window.app_combo.findData(app_name)
+            index = self._settings_window.app_combo.findData((app_name, None))
             if index >= 0:
                 self._settings_window.app_combo.setCurrentIndex(index)
 
@@ -310,7 +329,7 @@ class CheatsheetWindow(QMainWindow):
     def _on_shortcuts_saved(self, app_name):
         """Refresh the cheatsheet display if the saved app matches the currently displayed app."""
         if app_name == self._current_app:
-            data = get_app_shortcuts(app_name)
+            data = self._resolve_shortcuts(app_name, self._current_title)
             if data and data.get("shortcuts"):
                 if self.isHidden():
                     self.show()

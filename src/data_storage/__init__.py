@@ -174,6 +174,90 @@ def has_app_shortcuts(app_name: str) -> bool:
     return json_file.exists()
 
 
+def get_tab_profiles(app_name: str) -> List[Dict]:
+    """
+    Get the tab-specific profiles for an application.
+
+    Tab profiles let one application (e.g. a browser) show different shortcuts
+    depending on which tab is focused. Each profile matches a window by a
+    case-insensitive substring of its title.
+
+    Returns:
+        List of dicts:
+        [
+            {
+                "pattern": str,          # substring matched against the window title
+                "display_name": str,
+                "shortcuts": [{"keys": str, "description": str}, ...],
+            },
+            ...
+        ]
+    """
+    data = get_app_shortcuts(app_name)
+    if not data:
+        return []
+    return data.get("tabs", [])
+
+
+def get_tab_shortcuts(app_name: str, title: str) -> Optional[Dict]:
+    """
+    Get the tab profile matching a window title, or None.
+
+    The longest matching pattern wins so more specific titles take precedence.
+    """
+    if not title:
+        return None
+    best = None
+    for tab in get_tab_profiles(app_name):
+        pattern = tab.get("pattern", "")
+        if pattern and pattern.lower() in title.lower():
+            if best is None or len(pattern) > len(best.get("pattern", "")):
+                best = tab
+    return best
+
+
+def save_tab_shortcuts(app_name: str, pattern: str, shortcuts: List[Dict[str, str]]) -> None:
+    """
+    Save shortcuts for a tab profile identified by its title pattern.
+
+    Creates the tab profile (or the app file) when it doesn't exist yet.
+    """
+    data = get_app_shortcuts(app_name) or {
+        "app_name": app_name,
+        "display_name": app_name,
+        "shortcuts": [],
+    }
+    tabs = data.setdefault("tabs", [])
+    for tab in tabs:
+        if tab.get("pattern") == pattern:
+            tab["shortcuts"] = shortcuts
+            break
+    else:
+        tabs.append({"pattern": pattern, "display_name": pattern, "shortcuts": shortcuts})
+
+    data_dir = get_data_dir()
+    json_file = data_dir / f"{app_name}.json"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with open(json_file, 'w') as f:
+        json.dump(data, f, indent=2)
+
+
+def delete_tab_shortcuts(app_name: str, pattern: str) -> bool:
+    """Delete the tab profile with the given pattern. Returns True if it existed."""
+    data = get_app_shortcuts(app_name)
+    if not data:
+        return False
+    tabs = data.get("tabs", [])
+    remaining = [t for t in tabs if t.get("pattern") != pattern]
+    if len(remaining) == len(tabs):
+        return False
+    data["tabs"] = remaining
+    json_file = get_data_dir() / f"{app_name}.json"
+    with open(json_file, 'w') as f:
+        json.dump(data, f, indent=2)
+    return True
+
+
 def get_default_shortcuts() -> Optional[Dict]:
     """
     Get the default Ubuntu shortcuts.

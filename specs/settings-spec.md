@@ -13,3 +13,4 @@ The application will have a settings window that will
 - have all ui elements have a brighter background when they are focused.
 - have all ui elements be accesible with mnenomics
 - Opens a menu to select an application from the list of running applications when the add application button is pressed.
+- have a button to add a tab-specific shortcut profile for the selected application, chosen from that app's open window titles; tab profiles appear as entries in the application menu and are edited and deleted like app profiles.
