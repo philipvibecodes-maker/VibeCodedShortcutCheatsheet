@@ -232,6 +232,7 @@ class NotesWindow(QMainWindow):
         self.table.itemChanged.connect(self._on_item_changed)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setWordWrap(True)
+
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         splitter.addWidget(self.table)
@@ -250,15 +251,15 @@ class NotesWindow(QMainWindow):
 
         buttons.addStretch()
 
-        self.new_entry_btn = QPushButton("New &entry")
+        self.new_entry_btn = QPushButton("New e&ntry")
         self.new_entry_btn.clicked.connect(self._new_entry)
         buttons.addWidget(self.new_entry_btn)
 
-        self.edit_entry_btn = QPushButton("&Edit entry")
+        self.edit_entry_btn = QPushButton("Ed&it entry")
         self.edit_entry_btn.clicked.connect(self._edit_entry)
         buttons.addWidget(self.edit_entry_btn)
 
-        self.delete_entry_btn = QPushButton("D&elete entry")
+        self.delete_entry_btn = QPushButton("De&lete entry")
         self.delete_entry_btn.clicked.connect(self._delete_entry)
         buttons.addWidget(self.delete_entry_btn)
         layout.addLayout(buttons)
@@ -497,6 +498,21 @@ class NotesWindow(QMainWindow):
         ):
             self.search_edit.setFocus()
             return True
+        # Tab past the last cell / Shift+Tab before the first leaves the table
+        if (
+            obj is self.table
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab)
+        ):
+            model = self.table.model()
+            last = model.index(model.rowCount() - 1, model.columnCount() - 1)
+            first = model.index(0, 0)
+            if event.key() == Qt.Key.Key_Tab and self.table.currentIndex() == last:
+                self.focusNextPrevChild(True)
+                return True
+            if event.key() == Qt.Key.Key_Backtab and self.table.currentIndex() == first:
+                self.focusNextPrevChild(False)
+                return True
         return super().eventFilter(obj, event)
 
     def keyPressEvent(self, event):
