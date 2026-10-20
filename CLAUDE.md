@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Summary
 
-Shortcut Cheatsheet is a desktop app that displays keyboard shortcuts for the currently focused application on Ubuntu 24 (Gnome/Wayland) and Windows. It has two windows: a cheatsheet overlay and a settings editor.
+Shortcut Cheatsheet is a desktop app that displays keyboard shortcuts for the currently focused application on Ubuntu 24 (Gnome/Wayland) and Windows. It has three windows: a cheatsheet overlay, a settings editor, and a notes window (topic-based key/value notes, opened with `N`, large and centered, closes on Ctrl+Q or focus loss).
 
 ## Prerequisites
 
@@ -44,6 +44,7 @@ The codebase should be modular with platform-specific operations isolated for fu
 Detailed specifications live in `specs/`:
 - `cheatsheet-specs.md` — Cheatsheet window behavior
 - `settings-spec.md` — Settings window behavior
+- `notes-spec.md` — Notes window behavior
 - `window-info-specs.md` — Window detection module
 - `style-guidelines.md` — Code organization guidelines
 - `tech-stack.md` — Technology choices

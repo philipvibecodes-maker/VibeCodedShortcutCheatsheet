@@ -96,33 +96,44 @@ def _get_config_path() -> Path:
     return get_data_dir() / "config.json"
 
 
-def get_font_size() -> int:
-    """Get the stored font size, defaulting to 12."""
+def _get_config() -> Dict:
     config_path = _get_config_path()
     if config_path.exists():
         try:
             with open(config_path, 'r') as f:
-                config = json.load(f)
-                return config.get("font_size", 12)
+                return json.load(f)
         except (json.JSONDecodeError, IOError):
             pass
-    return 12
+    return {}
 
 
-def save_font_size(size: int) -> None:
-    """Save font size to config.json, preserving other config values."""
+def _save_config_value(key: str, value) -> None:
     config_path = _get_config_path()
-    config = {}
-    if config_path.exists():
-        try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
-    config["font_size"] = size
+    config = _get_config()
+    config[key] = value
     config_path.parent.mkdir(parents=True, exist_ok=True)
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
+
+
+def get_font_size() -> int:
+    """Get the stored cheatsheet font size, defaulting to 12."""
+    return _get_config().get("font_size", 12)
+
+
+def save_font_size(size: int) -> None:
+    """Save the cheatsheet font size to config.json, preserving other values."""
+    _save_config_value("font_size", size)
+
+
+def get_notes_font_size() -> int:
+    """Get the stored notes-window font size, defaulting to 12."""
+    return _get_config().get("notes_font_size", 12)
+
+
+def save_notes_font_size(size: int) -> None:
+    """Save the notes-window font size to config.json, preserving other values."""
+    _save_config_value("notes_font_size", size)
 
 
 def save_app_shortcuts(app_name: str, shortcuts: List[Dict[str, str]]) -> None:
@@ -259,6 +270,102 @@ def delete_tab_shortcuts(app_name: str, pattern: str) -> bool:
     json_file = get_data_dir() / f"{app_name}.json"
     with open(json_file, 'w') as f:
         json.dump(data, f, indent=2)
+    return True
+
+
+def _get_topics_path() -> Path:
+    """Return the path to the topics.json file."""
+    return get_data_dir() / "topics.json"
+
+
+def get_topics() -> Dict[str, List[Dict[str, str]]]:
+    """
+    Get all user-defined topics and their key/value entries.
+
+    Returns:
+        Dictionary mapping topic name to a list of entries.
+        Format:
+        {
+            "git": [{"key": "compare to origin main", "value": "git diff origin/main..."}],
+            ...
+        }
+    """
+    topics_path = _get_topics_path()
+    if not topics_path.exists():
+        return {}
+    try:
+        with open(topics_path, 'r') as f:
+            data = json.load(f)
+            return data.get("topics", {})
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"Error loading topics: {e}")
+        return {}
+
+
+def save_topics(topics: Dict[str, List[Dict[str, str]]]) -> None:
+    """
+    Save the full topics mapping.
+
+    Args:
+        topics: Dictionary mapping topic name to a list of
+                {"key": str, "value": str} entries.
+    """
+    topics_path = _get_topics_path()
+    topics_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(topics_path, 'w') as f:
+        json.dump({"topics": topics}, f, indent=2)
+
+
+def add_topic(name: str) -> bool:
+    """Add an empty topic. Returns False if it already exists or the name is blank."""
+    name = name.strip()
+    if not name:
+        return False
+    topics = get_topics()
+    if name in topics:
+        return False
+    topics[name] = []
+    save_topics(topics)
+    return True
+
+
+def delete_topic(name: str) -> bool:
+    """Delete a topic and all its entries. Returns False if it didn't exist."""
+    topics = get_topics()
+    if name not in topics:
+        return False
+    del topics[name]
+    save_topics(topics)
+    return True
+
+
+def add_topic_entry(topic: str, key: str, value: str) -> bool:
+    """Append a key/value entry to a topic. Returns False if the topic doesn't exist."""
+    topics = get_topics()
+    if topic not in topics:
+        return False
+    topics[topic].append({"key": key, "value": value})
+    save_topics(topics)
+    return True
+
+
+def update_topic_entry(topic: str, index: int, key: str, value: str) -> bool:
+    """Replace the entry at index in a topic. Returns False if out of range."""
+    topics = get_topics()
+    if topic not in topics or not (0 <= index < len(topics[topic])):
+        return False
+    topics[topic][index] = {"key": key, "value": value}
+    save_topics(topics)
+    return True
+
+
+def delete_topic_entry(topic: str, index: int) -> bool:
+    """Delete the entry at index in a topic. Returns False if out of range."""
+    topics = get_topics()
+    if topic not in topics or not (0 <= index < len(topics[topic])):
+        return False
+    del topics[topic][index]
+    save_topics(topics)
     return True
 
 

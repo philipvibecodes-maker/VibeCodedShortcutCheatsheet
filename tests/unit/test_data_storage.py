@@ -137,3 +137,14 @@ def test_delete_tab_shortcuts(temp_data_dir):
     assert data_storage.delete_tab_shortcuts("brave-browser", "GitHub") is True
     assert data_storage.delete_tab_shortcuts("brave-browser", "GitHub") is False
     assert data_storage.get_tab_profiles("brave-browser") == []
+
+
+
+def test_notes_font_size_independent(temp_data_dir):
+    assert data_storage.get_notes_font_size() == 12
+    data_storage.save_notes_font_size(20)
+    assert data_storage.get_notes_font_size() == 20
+    # independent of the cheatsheet font size
+    assert data_storage.get_font_size() == 12
+    data_storage.save_font_size(9)
+    assert data_storage.get_notes_font_size() == 20

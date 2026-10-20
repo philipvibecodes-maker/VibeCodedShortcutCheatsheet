@@ -40,10 +40,38 @@ def try_send_toggle():
     return False
 
 
+def try_send_toggle_notes():
+    """Ask a running instance to toggle the notes window. Returns True if it connected."""
+    socket = QLocalSocket()
+    socket.connectToServer(SERVER_NAME)
+    if socket.waitForConnected(500):
+        socket.write(json.dumps({"action": "toggle_notes"}).encode())
+        socket.waitForBytesWritten(500)
+        socket.disconnectFromServer()
+        return True
+    return False
+
+
+def _register_notes_hotkey(window):
+    """Register the global Ctrl+Shift+\\ notes toggle. Best-effort."""
+    try:
+        if sys.platform.startswith("linux"):
+            from src.platform.linux_gnome.hotkey import register_notes_hotkey
+            register_notes_hotkey()
+        elif sys.platform == "win32":
+            from src.platform.windows.hotkey import install_notes_hotkey
+            window._notes_hotkey_filter = install_notes_hotkey(window.toggle_notes)
+    except Exception as e:
+        print(f"Could not register the notes hotkey: {e}")
+
+
 def main():
     app = QApplication(sys.argv)
+    toggle_notes_flag = "--toggle-notes" in sys.argv
 
-    if try_send_toggle():
+    if toggle_notes_flag and try_send_toggle_notes():
+        sys.exit(0)
+    if not toggle_notes_flag and try_send_toggle():
         sys.exit(0)
 
     ok, message = is_platform_supported()
@@ -70,12 +98,17 @@ def main():
                 msg = json.loads(data)
                 if msg.get("action") == "toggle":
                     window.handle_second_instance(msg.get("focused_app", ""), msg.get("focused_title", ""))
+                elif msg.get("action") == "toggle_notes":
+                    window.toggle_notes()
             except (json.JSONDecodeError, ValueError):
                 pass
 
     server.newConnection.connect(on_new_connection)
 
     window.show()
+    _register_notes_hotkey(window)
+    if toggle_notes_flag:
+        window.toggle_notes()
     sys.exit(app.exec())
 
 
