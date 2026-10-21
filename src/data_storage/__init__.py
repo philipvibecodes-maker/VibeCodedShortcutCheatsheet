@@ -146,6 +146,16 @@ def save_notes_last_topic(topic: str) -> None:
     _save_config_value("notes_last_topic", topic)
 
 
+def get_skip_delete_confirmation() -> bool:
+    """Return True when the user opted out of the delete confirmation dialog."""
+    return bool(_get_config().get("skip_delete_confirmation", False))
+
+
+def save_skip_delete_confirmation(skip: bool) -> None:
+    """Persist the "don't ask again" choice for delete confirmations."""
+    _save_config_value("skip_delete_confirmation", skip)
+
+
 def save_app_shortcuts(app_name: str, shortcuts: List[Dict[str, str]]) -> None:
     """
     Save shortcuts for a specific application.
@@ -176,23 +186,121 @@ def delete_app_shortcuts(app_name: str) -> bool:
     """
     Delete the shortcut profile for a specific application.
 
+    Tab profiles stored in the same file are preserved: when the app has
+    tabs, only its app-level shortcuts are cleared and the file is kept.
+    The file is removed only when no tab profiles remain.
+
     Args:
         app_name: The application name (e.g., 'brave-browser')
 
     Returns:
-        True if the file was deleted, False if it didn't exist.
+        True if the app profile was deleted or cleared, False if it didn't exist.
     """
     json_file = get_data_dir() / f"{app_name}.json"
-    if json_file.exists():
+    if not json_file.exists():
+        return False
+    data = get_app_shortcuts(app_name) or {}
+    if data.get("tabs"):
+        data["shortcuts"] = []
+        with open(json_file, 'w') as f:
+            json.dump(data, f, indent=2)
+    else:
         json_file.unlink()
-        return True
-    return False
+    return True
 
 
 def has_app_shortcuts(app_name: str) -> bool:
     """Check whether the given application has at least one recorded shortcut."""
     data = get_app_shortcuts(app_name)
-    return bool(data and data.get("shortcuts"))
+    if not data:
+        return False
+    if data.get("shortcuts"):
+        return True
+    return any(t.get("shortcuts") for t in data.get("tabs", []))
+
+
+def get_tab_profiles(app_name: str) -> List[Dict]:
+    """
+    Get the tab-specific profiles for an application.
+
+    Tab profiles let one application (e.g. a browser) show different shortcuts
+    depending on which tab is focused. Each profile matches a window by a
+    case-insensitive substring of its title.
+
+    Returns:
+        List of dicts:
+        [
+            {
+                "pattern": str,          # substring matched against the window title
+                "display_name": str,
+                "shortcuts": [{"keys": str, "description": str}, ...],
+            },
+            ...
+        ]
+    """
+    data = get_app_shortcuts(app_name)
+    if not data:
+        return []
+    return data.get("tabs", [])
+
+
+def get_tab_shortcuts(app_name: str, title: str) -> Optional[Dict]:
+    """
+    Get the tab profile matching a window title, or None.
+
+    The longest matching pattern wins so more specific titles take precedence.
+    """
+    if not title:
+        return None
+    best = None
+    for tab in get_tab_profiles(app_name):
+        pattern = tab.get("pattern", "")
+        if pattern and pattern.lower() in title.lower():
+            if best is None or len(pattern) > len(best.get("pattern", "")):
+                best = tab
+    return best
+
+
+def save_tab_shortcuts(app_name: str, pattern: str, shortcuts: List[Dict[str, str]]) -> None:
+    """
+    Save shortcuts for a tab profile identified by its title pattern.
+
+    Creates the tab profile (or the app file) when it doesn't exist yet.
+    """
+    data = get_app_shortcuts(app_name) or {
+        "app_name": app_name,
+        "display_name": app_name,
+        "shortcuts": [],
+    }
+    tabs = data.setdefault("tabs", [])
+    for tab in tabs:
+        if tab.get("pattern") == pattern:
+            tab["shortcuts"] = shortcuts
+            break
+    else:
+        tabs.append({"pattern": pattern, "display_name": pattern, "shortcuts": shortcuts})
+
+    data_dir = get_data_dir()
+    json_file = data_dir / f"{app_name}.json"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with open(json_file, 'w') as f:
+        json.dump(data, f, indent=2)
+
+
+def delete_tab_shortcuts(app_name: str, pattern: str) -> bool:
+    """Delete the tab profile with the given pattern. Returns True if it existed."""
+    data = get_app_shortcuts(app_name)
+    if not data:
+        return False
+    tabs = data.get("tabs", [])
+    remaining = [t for t in tabs if t.get("pattern") != pattern]
+    if len(remaining) == len(tabs):
+        return False
+    data["tabs"] = remaining
+    json_file = get_data_dir() / f"{app_name}.json"
+    with open(json_file, 'w') as f:
+        json.dump(data, f, indent=2)
+    return True
 
 
 def _get_topics_path() -> Path:
