@@ -136,6 +136,16 @@ def save_notes_font_size(size: int) -> None:
     _save_config_value("notes_font_size", size)
 
 
+def get_notes_last_topic() -> Optional[str]:
+    """Get the topic the notes window last showed, or None if never set."""
+    return _get_config().get("notes_last_topic")
+
+
+def save_notes_last_topic(topic: str) -> None:
+    """Save the notes window's current topic to config.json, preserving other values."""
+    _save_config_value("notes_last_topic", topic)
+
+
 def save_app_shortcuts(app_name: str, shortcuts: List[Dict[str, str]]) -> None:
     """
     Save shortcuts for a specific application.

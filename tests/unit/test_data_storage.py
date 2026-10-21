@@ -139,6 +139,14 @@ def test_delete_tab_shortcuts(temp_data_dir):
     assert data_storage.get_tab_profiles("brave-browser") == []
 
 
+def test_notes_last_topic_roundtrip(temp_data_dir):
+    assert data_storage.get_notes_last_topic() is None
+    data_storage.save_notes_last_topic("git")
+    assert data_storage.get_notes_last_topic() == "git"
+    # independent of other notes config
+    data_storage.save_notes_font_size(20)
+    assert data_storage.get_notes_last_topic() == "git"
+
 
 def test_notes_font_size_independent(temp_data_dir):
     assert data_storage.get_notes_font_size() == 12

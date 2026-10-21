@@ -86,7 +86,7 @@ def main():
     server = QLocalServer()
     server.listen(SERVER_NAME)
 
-    window = CheatsheetWindow()
+    window = CheatsheetWindow(open_settings_for_new_app=not toggle_notes_flag)
 
     def on_new_connection():
         client = server.nextPendingConnection()
@@ -105,7 +105,10 @@ def main():
 
     server.newConnection.connect(on_new_connection)
 
-    window.show()
+    # A notes-toggle launch shows only the notes window — the cheatsheet (and
+    # the add-shortcuts window for unprofiled apps) stays hidden.
+    if not toggle_notes_flag:
+        window.show()
     _register_notes_hotkey(window)
     if toggle_notes_flag:
         window.toggle_notes()

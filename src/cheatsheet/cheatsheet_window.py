@@ -72,7 +72,7 @@ class CircularButton(QPushButton):
 
 
 class CheatsheetWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, open_settings_for_new_app=True):
         super().__init__()
         self.setWindowTitle("Shortcut Cheatsheet")
         self.setWindowFlags(
@@ -129,8 +129,9 @@ class CheatsheetWindow(QMainWindow):
             # Display something so the widget is initialized, then hide after show
             self._display_shortcuts(get_default_shortcuts())
             QTimer.singleShot(0, self.hide)
-            # Launching on an unprofiled app opens the add-shortcuts window
-            QTimer.singleShot(0, lambda: self._open_settings_for_new_app(self._current_app))
+            if open_settings_for_new_app:
+                # Launching on an unprofiled app opens the add-shortcuts window
+                QTimer.singleShot(0, lambda: self._open_settings_for_new_app(self._current_app))
 
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._on_poll)
