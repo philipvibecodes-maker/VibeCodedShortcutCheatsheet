@@ -60,3 +60,22 @@ Keep `window-calls` for Wayland. Do not decide based on `DISPLAY` alone: under
 Wayland the app forces `QT_QPA_PLATFORM=xcb`, so `DISPLAY` can exist through
 XWayland while native Wayland windows remain invisible to X11 property queries.
 Dispatch on `XDG_SESSION_TYPE=x11` instead.
+
+## Implemented
+
+`src/platform/linux_gnome/x11_window_detection.py` now implements all five
+detection functions via `libX11`/`ctypes`; `src/platform/__init__.py` selects it
+when `XDG_SESSION_TYPE=x11` and falls back to `window-calls` otherwise.
+
+Post-change measurements (in-app `bench_perf.py`, real `get_focused_window`
+polling):
+
+| Poll rate | `_on_poll` avg (before → after) | Polls/s achieved | CPU |
+|---|---:|---:|---:|
+| 10 Hz | ~7.7 ms → 0.5 ms | 10 | ~4 % |
+| 100 Hz | ~3.9 ms → 0.3 ms | 100 | ~6 % |
+| 1000 Hz | ~11.5 ms → 0.16 ms | ~82 → ~996 | ~9–15 % |
+
+At 1000 Hz the gdbus path could only complete ~82 polls/sec and degraded every
+other latency measurement (notes open ~106 ms mean); the X11 path sustains the
+full rate with headroom.
