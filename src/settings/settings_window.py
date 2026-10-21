@@ -218,6 +218,10 @@ class SettingsWindow(QMainWindow):
 
         app_row = QHBoxLayout()
         self.app_combo = QComboBox()
+        self.app_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.app_combo.setMinimumContentsLength(15)
         self._populate_app_combo()
         self.app_combo.currentIndexChanged.connect(self._on_app_changed)
         app_row.addWidget(self.app_combo, 1)
@@ -430,6 +434,8 @@ class SettingsWindow(QMainWindow):
             for tab in data.get("tabs", []):
                 pattern = tab.get("pattern", "")
                 label = f"{data.get('display_name', app_name)} — tab: {tab.get('display_name', pattern)}"
+                if len(label) > 60:
+                    label = label[:57] + "…"
                 self.app_combo.addItem(label, (app_name, pattern))
 
     def _find_index(self, app_name, pattern=None):
