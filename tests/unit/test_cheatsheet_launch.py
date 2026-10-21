@@ -155,3 +155,29 @@ def test_second_launch_with_shortcuts_reopens_cheatsheet(cheatsheet):
     assert not _settings_visible(cheatsheet), (
         "add-shortcuts window must not open for an app that already has shortcuts"
     )
+
+
+def test_toggle_after_app_delete_does_not_reopen_settings(cheatsheet, focused_window):
+    """Deleting the focused app's profile, then toggling, must not re-point the
+    (still open) settings window at the deleted app — the deletion was
+    deliberate, not a request to re-add it."""
+    data_storage.save_skip_delete_confirmation(True)
+
+    # Dismiss the add-shortcuts window that first launch opened for ghost-app
+    cheatsheet._settings_window.close()
+
+    focused_window["wm_class"] = APP_WITH_SHORTCUTS
+    cheatsheet._on_poll()
+    assert cheatsheet.isVisible()
+
+    cheatsheet._open_settings()
+    cheatsheet._settings_window._delete_app()
+    assert _settings_visible(cheatsheet)  # settings stays open after delete
+    assert cheatsheet._settings_window.app_combo.currentData() != APP_WITH_SHORTCUTS
+
+    cheatsheet.handle_second_instance(APP_WITH_SHORTCUTS, "Brave Window")
+
+    assert not cheatsheet.isVisible()
+    assert cheatsheet._settings_window.app_combo.currentData() != APP_WITH_SHORTCUTS, (
+        "toggle must not reopen add-shortcuts for the app that was just deleted"
+    )

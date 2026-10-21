@@ -89,6 +89,7 @@ class CheatsheetWindow(QMainWindow):
         self._font_size = get_font_size()
         self._settings_window = None
         self._notes_window = None
+        self._deleted_apps = set()  # Apps deleted this session; never re-prompt
 
         self.central = QWidget()
         self.central.setObjectName("central_widget")
@@ -342,6 +343,8 @@ class CheatsheetWindow(QMainWindow):
                 self._resolve_shortcuts(focused_app, focused_title))
             self.show()
             self.raise_()
+        elif focused_app and focused_app in self._deleted_apps:
+            pass  # User deleted this app's profile; stay hidden, don't re-prompt
         else:
             self._open_settings_for_new_app(focused_app, focused_title)
 
@@ -367,6 +370,7 @@ class CheatsheetWindow(QMainWindow):
 
     def _on_shortcuts_saved(self, app_name):
         """Refresh the cheatsheet display if the saved app matches the currently displayed app."""
+        self._deleted_apps.discard(app_name)
         if app_name == self._current_app:
             data = self._resolve_shortcuts(app_name, self._current_title)
             if data and data.get("shortcuts"):
@@ -376,6 +380,7 @@ class CheatsheetWindow(QMainWindow):
 
     def _on_app_deleted(self, app_name):
         """Minimize the cheatsheet if the deleted app is currently displayed."""
+        self._deleted_apps.add(app_name)
         if app_name == self._current_app:
             self.hide()
 
