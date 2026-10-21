@@ -1,9 +1,13 @@
+import re
+
 from PyQt6.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLineEdit,
     QMainWindow,
     QMenu,
@@ -16,8 +20,55 @@ from PyQt6.QtWidgets import (
 )
 
 
-from src.data_storage import delete_app_shortcuts, get_all_shortcuts, get_app_shortcuts, save_app_shortcuts
-from src.platform import get_open_app_names
+from src.data_storage import delete_app_shortcuts, delete_tab_shortcuts, get_all_shortcuts, get_app_shortcuts, get_skip_delete_confirmation, get_tab_profiles, save_app_shortcuts, save_skip_delete_confirmation, save_tab_shortcuts
+from src.platform import get_open_app_names, get_open_windows
+
+
+_URL_RE = re.compile(
+    r"(?:https?://|www\.)([a-z0-9-]+(?:\.[a-z0-9-]+)+)",
+    re.IGNORECASE,
+)
+_COMMON_TLDS = {
+    "com", "org", "net", "edu", "gov", "io", "dev", "app", "ai", "sh",
+    "co", "me", "info", "site", "tech", "docs", "cloud", "gg", "wiki",
+}
+_DOMAIN_RE = re.compile(r"\b((?:[a-z0-9-]+\.)+[a-z]{2,})\b", re.IGNORECASE)
+_TITLE_SEPARATOR_RE = re.compile(r"\s[-–—·|]\s")
+_BROWSER_NAMES = {
+    "google chrome", "mozilla firefox", "firefox", "brave",
+    "microsoft edge", "edge", "chromium", "opera", "vivaldi", "safari",
+}
+_BROWSER_APP_HINTS = (
+    "chrome", "firefox", "brave", "msedge", "edge", "chromium",
+    "opera", "vivaldi", "safari", "browser",
+)
+
+
+def _is_browser_app(app_name):
+    """Whether an app name looks like a browser (e.g. "chrome.exe", "brave-browser")."""
+    name = (app_name or "").lower()
+    return any(hint in name for hint in _BROWSER_APP_HINTS)
+
+
+def site_name_from_title(title):
+    """Derive a short site name from a window title.
+
+    Uses the domain when the title contains a URL (e.g. "github.com"),
+    otherwise the last title segment minus the browser name
+    ("Repo · GitHub - Google Chrome" -> "GitHub").
+    """
+    match = _URL_RE.search(title or "")
+    if match:
+        return match.group(1).removeprefix("www.").lower()
+    for match in _DOMAIN_RE.finditer(title or ""):
+        domain = match.group(1)
+        if domain.rsplit(".", 1)[-1].lower() in _COMMON_TLDS:
+            return domain.removeprefix("www.").lower()
+    parts = [
+        part.strip() for part in _TITLE_SEPARATOR_RE.split(title or "")
+        if part.strip() and part.strip().lower() not in _BROWSER_NAMES
+    ]
+    return parts[-1] if parts else (title or "").strip()
 
 
 class ShortcutTable(QTableWidget):
@@ -201,12 +252,15 @@ class SettingsWindow(QMainWindow):
     shortcuts_saved = pyqtSignal(str)  # Signal emitted when shortcuts are saved, passes app_name
     app_deleted = pyqtSignal(str)  # Signal emitted when an app is deleted, passes app_name
 
-    def __init__(self, app_name=None):
+    def __init__(self, app_name=None, focused_title=None):
         super().__init__()
         self.setWindowTitle("Settings")
         self.setStyleSheet(DARK_THEME)
         self._app_name = app_name
+        self._tab_pattern = None  # Title pattern when a tab profile is selected
+        self._focused_title = focused_title
         self._new_apps = set()  # Apps added this session, not yet saved
+        self._new_tabs = set()  # (app_name, pattern) tab profiles added this session
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -214,6 +268,10 @@ class SettingsWindow(QMainWindow):
 
         app_row = QHBoxLayout()
         self.app_combo = QComboBox()
+        self.app_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.app_combo.setMinimumContentsLength(15)
         self._populate_app_combo()
         self.app_combo.currentIndexChanged.connect(self._on_app_changed)
         app_row.addWidget(self.app_combo, 1)
@@ -221,6 +279,14 @@ class SettingsWindow(QMainWindow):
         self.add_app_btn = QPushButton("Add a&pp")
         self.add_app_btn.clicked.connect(self._show_add_app_menu)
         app_row.addWidget(self.add_app_btn)
+
+        self.add_tab_btn = QPushButton("Add &tab")
+        self.add_tab_btn.clicked.connect(self._add_tab)
+        self.add_tab_btn.setToolTip(
+            "Add shortcuts that only show when the focused window's title\n"
+            "contains this pattern (e.g. one browser tab or site)."
+        )
+        app_row.addWidget(self.add_tab_btn)
 
         self.delete_app_btn = QPushButton("&Delete app")
         self.delete_app_btn.clicked.connect(self._delete_app)
@@ -258,7 +324,8 @@ class SettingsWindow(QMainWindow):
         self.table.tab_prev_widget = self.delete_app_btn
 
         QWidget.setTabOrder(self.app_combo, self.add_app_btn)
-        QWidget.setTabOrder(self.add_app_btn, self.delete_app_btn)
+        QWidget.setTabOrder(self.add_app_btn, self.add_tab_btn)
+        QWidget.setTabOrder(self.add_tab_btn, self.delete_app_btn)
         QWidget.setTabOrder(self.delete_app_btn, self.table)
         QWidget.setTabOrder(self.table, self.add_shortcut_btn)
         QWidget.setTabOrder(self.add_shortcut_btn, self.cancel_btn)
@@ -269,7 +336,7 @@ class SettingsWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
 
         if app_name:
-            index = self.app_combo.findData(app_name)
+            index = self._find_index(app_name)
             if index >= 0:
                 self.app_combo.setCurrentIndex(index)
             self._load_shortcuts(app_name)
@@ -315,50 +382,211 @@ class SettingsWindow(QMainWindow):
     def _add_app(self, app_name):
         save_app_shortcuts(app_name, [])
         self._new_apps.add(app_name)
-        if self.app_combo.findData(app_name) < 0:
+        if self._find_index(app_name) < 0:
             self.app_combo.addItem(app_name, app_name)
-        self.app_combo.setCurrentIndex(self.app_combo.findData(app_name))
+        self.app_combo.setCurrentIndex(self._find_index(app_name))
+
+    def _add_tab(self):
+        """Create a tab profile under the selected app.
+
+        Offers the site name of each of the app's open windows; the chosen
+        name is remembered as the pattern so the profile is shown the next
+        time a tab for that site is focused.
+        """
+        app_name = self._app_name
+        if not app_name:
+            return
+
+        # Tab profiles are meant for browsers — a terminal's windows aren't
+        # websites, so non-browser apps only get the custom-pattern option.
+        titles = []
+        if _is_browser_app(app_name):
+            try:
+                titles = [w["title"] for w in get_open_windows()
+                          if w.get("wm_class") == app_name and w.get("title")]
+            except Exception:
+                titles = []
+            if self._focused_title and self._focused_title not in titles:
+                titles.insert(0, self._focused_title)
+
+        sites = []
+        for title in titles:
+            site = site_name_from_title(title)
+            if site and site not in sites:
+                sites.append(site)
+
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #333;
+                color: #e0e0e0;
+            }
+            QMenu::item:selected {
+                background-color: #444;
+            }
+        """)
+        if not sites:
+            label = ("No windows found for this application" if _is_browser_app(app_name)
+                     else "Tab profiles are only supported for browsers")
+            action = menu.addAction(label)
+            action.setEnabled(False)
+        else:
+            for site in sites:
+                menu.addAction(site)
+        menu.addSeparator()
+        custom_action = menu.addAction("Custom pattern…")
+
+        action = menu.exec(self.add_tab_btn.mapToGlobal(
+            self.add_tab_btn.rect().bottomLeft()
+        ))
+        if not action or not action.isEnabled():
+            return
+
+        # Confirm/edit the pattern before saving — the site name is a guess
+        # (e.g. "uv" for docs.astral.sh), so the user can correct it here.
+        initial = "" if action is custom_action else action.text()
+        pattern, ok = QInputDialog.getText(
+            self, "Add Tab Profile",
+            "Text to match in the window title\n"
+            "(e.g. 'GitHub' matches any tab whose title contains it):",
+            text=initial,
+        )
+        if not ok:
+            return
+        pattern = pattern.strip()
+        if not pattern:
+            return
+        if not any(t.get("pattern") == pattern for t in get_tab_profiles(app_name)):
+            save_tab_shortcuts(app_name, pattern, [])
+            self._new_tabs.add((app_name, pattern))
+        self._rebuild_app_combo(select=(app_name, pattern))
 
     def _delete_app(self):
         if not self._app_name:
             return
 
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Delete Application")
-        msg.setText(f"Delete all shortcuts for {self.app_combo.currentText()}?")
-        msg.setStandardButtons(
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        msg.setDefaultButton(QMessageBox.StandardButton.No)
-        if msg.exec() != QMessageBox.StandardButton.Yes:
+        if self._tab_pattern is not None:
+            what = f"tab profile '{self._tab_pattern}' for {self._app_name}"
+        elif get_tab_profiles(self._app_name):
+            what = (f"the shortcuts for {self.app_combo.currentText()}"
+                    " (its tab profiles will be kept)")
+        else:
+            what = f"all shortcuts for {self.app_combo.currentText()}"
+        if not get_skip_delete_confirmation():
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Delete Application")
+            msg.setText(f"Delete {what}?")
+            msg.setStandardButtons(
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            msg.setDefaultButton(QMessageBox.StandardButton.No)
+            checkbox = QCheckBox("&Don't ask again")
+            msg.setCheckBox(checkbox)
+            if msg.exec() != QMessageBox.StandardButton.Yes:
+                return
+            if checkbox.isChecked():
+                save_skip_delete_confirmation(True)
+
+        if self._tab_pattern is not None:
+            app_name = self._app_name
+            self._new_tabs.discard((app_name, self._tab_pattern))
+            delete_tab_shortcuts(app_name, self._tab_pattern)
+            self._rebuild_app_combo(select=(app_name, None))
+            self.shortcuts_saved.emit(app_name)
             return
 
         deleted_app_name = self._app_name
+        was_new = deleted_app_name in self._new_apps
         self._new_apps.discard(deleted_app_name)
-        delete_app_shortcuts(self._app_name)
+        if was_new:
+            # Unsaved tab profiles die with the unsaved app; otherwise the
+            # app file would linger holding tabs that were never saved.
+            for tab in set(self._new_tabs):
+                if tab[0] == deleted_app_name:
+                    delete_tab_shortcuts(*tab)
+                    self._new_tabs.discard(tab)
+        delete_app_shortcuts(deleted_app_name)
         self.app_deleted.emit(deleted_app_name)  # Notify that app was deleted
-        self.close()
+        self._rebuild_app_combo(select=(deleted_app_name, None))
+        if self.app_combo.count() == 0:
+            self._app_name = None
+            self._tab_pattern = None
+            self.table.setRowCount(0)
 
     def _populate_app_combo(self):
         all_shortcuts = get_all_shortcuts()
         for app_name, data in sorted(all_shortcuts.items(), key=lambda x: x[1].get("display_name", x[0])):
             self.app_combo.addItem(data.get("display_name", app_name), app_name)
+            for tab in data.get("tabs", []):
+                pattern = tab.get("pattern", "")
+                label = f"{data.get('display_name', app_name)} — tab: {tab.get('display_name', pattern)}"
+                if len(label) > 60:
+                    label = label[:57] + "…"
+                self.app_combo.addItem(label, (app_name, pattern))
+
+    def _find_index(self, app_name, pattern=None):
+        """Index of the combo entry for an app or tab profile, or -1.
+
+        Loops instead of findData(): Qt can't compare the tuple itemData
+        reliably, so entries are matched element-wise.
+        """
+        for i in range(self.app_combo.count()):
+            entry = self.app_combo.itemData(i)
+            if isinstance(entry, tuple):
+                if tuple(entry) == (app_name, pattern):
+                    return i
+            elif pattern is None and entry == app_name:
+                return i
+        return -1
+
+    def _rebuild_app_combo(self, select=None):
+        """Repopulate the combo and select the given (app, pattern) entry.
+
+        Defaults to preserving the current selection; falls back to the first
+        entry when the requested one is gone, and always reloads the table.
+        """
+        if select is None:
+            select = (self._app_name, self._tab_pattern)
+        self.app_combo.blockSignals(True)
+        self.app_combo.clear()
+        self._populate_app_combo()
+        self.app_combo.blockSignals(False)
+        index = self._find_index(*select)
+        if index < 0 and self.app_combo.count():
+            index = 0
+        if index >= 0:
+            self.app_combo.setCurrentIndex(index)
+            self._on_app_changed(index)
 
     def _on_app_changed(self, index):
         if index < 0:
             return
-        app_name = self.app_combo.itemData(index)
-        if app_name:
-            self._load_shortcuts(app_name)
-
-    def _load_shortcuts(self, app_name):
-        self._app_name = app_name
-        self.table.setRowCount(0)
-        data = get_app_shortcuts(app_name)
-        if not data:
+        entry = self.app_combo.itemData(index)
+        if not entry:
             return
+        if isinstance(entry, tuple):
+            app_name, pattern = entry
+        else:
+            app_name, pattern = entry, None
+        self._load_shortcuts(app_name, pattern)
 
-        shortcuts = data.get("shortcuts", [])
+    def _load_shortcuts(self, app_name, pattern=None):
+        self._app_name = app_name
+        self._tab_pattern = pattern
+        self.table.setRowCount(0)
+
+        shortcuts = None
+        if pattern is not None:
+            for tab in get_tab_profiles(app_name):
+                if tab.get("pattern") == pattern:
+                    shortcuts = tab.get("shortcuts", [])
+                    break
+        else:
+            data = get_app_shortcuts(app_name)
+            if data:
+                shortcuts = data.get("shortcuts", [])
+        if shortcuts is None:
+            return
         self.table.setRowCount(len(shortcuts))
         for row, shortcut in enumerate(shortcuts):
             self.table.setItem(row, 0, QTableWidgetItem(shortcut["description"]))
@@ -409,12 +637,21 @@ class SettingsWindow(QMainWindow):
                 shortcuts.append({"keys": keys, "description": description})
 
         self._new_apps.discard(self._app_name)  # Mark as saved
-        save_app_shortcuts(self._app_name, shortcuts)
+        if self._tab_pattern is not None:
+            self._new_tabs.discard((self._app_name, self._tab_pattern))
+            save_tab_shortcuts(self._app_name, self._tab_pattern, shortcuts)
+        else:
+            save_app_shortcuts(self._app_name, shortcuts)
         self.shortcuts_saved.emit(self._app_name)  # Notify that shortcuts were saved
         self.close()
 
     def closeEvent(self, event):
-        """Remove unsaved new apps on close."""
+        """Remove unsaved new apps and tab profiles on close."""
+        # Tab profiles first: deleting the app preserves its tabs, so an app
+        # whose tabs are all removed first can be fully deleted afterwards.
+        for app_name, pattern in self._new_tabs:
+            delete_tab_shortcuts(app_name, pattern)
+        self._new_tabs.clear()
         for app_name in self._new_apps:
             delete_app_shortcuts(app_name)
         self._new_apps.clear()
