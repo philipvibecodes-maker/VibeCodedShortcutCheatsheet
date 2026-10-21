@@ -32,8 +32,10 @@ from src.data_storage import (
     delete_topic_entry,
     get_all_shortcuts,
     get_notes_font_size,
+    get_notes_last_topic,
     get_topics,
     save_notes_font_size,
+    save_notes_last_topic,
     update_topic_entry,
 )
 
@@ -219,9 +221,7 @@ class NotesWindow(QMainWindow):
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.topic_list = QListWidget()
-        self.topic_list.currentItemChanged.connect(
-            lambda current, previous: self._refresh_entries()
-        )
+        self.topic_list.currentItemChanged.connect(self._on_topic_changed)
         splitter.addWidget(self.topic_list)
 
         self.table = QTableWidget()
@@ -281,7 +281,7 @@ class NotesWindow(QMainWindow):
         self.table.installEventFilter(self)
 
         self._apply_font_size()
-        self._refresh_topics()
+        self._refresh_topics(select=get_notes_last_topic())
 
     # --- data helpers -----------------------------------------------------
 
@@ -310,6 +310,11 @@ class NotesWindow(QMainWindow):
         return topic is not None and topic.startswith(SHORTCUT_TOPIC_PREFIX)
 
     # --- UI refresh -------------------------------------------------------
+
+    def _on_topic_changed(self, current, previous):
+        if current is not None:
+            save_notes_last_topic(current.data(Qt.ItemDataRole.UserRole))
+        self._refresh_entries()
 
     def _refresh_topics(self, select=None):
         current = select or self._current_topic()
