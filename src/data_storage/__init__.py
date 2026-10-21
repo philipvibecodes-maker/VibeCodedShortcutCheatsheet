@@ -146,6 +146,16 @@ def save_notes_last_topic(topic: str) -> None:
     _save_config_value("notes_last_topic", topic)
 
 
+def get_skip_delete_confirmation() -> bool:
+    """Return True when the user opted out of the delete confirmation dialog."""
+    return bool(_get_config().get("skip_delete_confirmation", False))
+
+
+def save_skip_delete_confirmation(skip: bool) -> None:
+    """Persist the "don't ask again" choice for delete confirmations."""
+    _save_config_value("skip_delete_confirmation", skip)
+
+
 def save_app_shortcuts(app_name: str, shortcuts: List[Dict[str, str]]) -> None:
     """
     Save shortcuts for a specific application.

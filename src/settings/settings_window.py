@@ -1,6 +1,7 @@
 from PyQt6.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QHeaderView,
@@ -17,7 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 
-from src.data_storage import delete_app_shortcuts, delete_tab_shortcuts, get_all_shortcuts, get_app_shortcuts, get_tab_profiles, save_app_shortcuts, save_tab_shortcuts
+from src.data_storage import delete_app_shortcuts, delete_tab_shortcuts, get_all_shortcuts, get_app_shortcuts, get_skip_delete_confirmation, get_tab_profiles, save_app_shortcuts, save_skip_delete_confirmation, save_tab_shortcuts
 from src.platform import get_open_app_names, get_open_windows
 
 
@@ -403,15 +404,20 @@ class SettingsWindow(QMainWindow):
             what = f"tab profile '{self._tab_pattern}' for {self._app_name}"
         else:
             what = f"all shortcuts for {self.app_combo.currentText()}"
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Delete Application")
-        msg.setText(f"Delete {what}?")
-        msg.setStandardButtons(
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        msg.setDefaultButton(QMessageBox.StandardButton.No)
-        if msg.exec() != QMessageBox.StandardButton.Yes:
-            return
+        if not get_skip_delete_confirmation():
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Delete Application")
+            msg.setText(f"Delete {what}?")
+            msg.setStandardButtons(
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            msg.setDefaultButton(QMessageBox.StandardButton.No)
+            checkbox = QCheckBox("&Don't ask again")
+            msg.setCheckBox(checkbox)
+            if msg.exec() != QMessageBox.StandardButton.Yes:
+                return
+            if checkbox.isChecked():
+                save_skip_delete_confirmation(True)
 
         if self._tab_pattern is not None:
             app_name = self._app_name
@@ -423,9 +429,13 @@ class SettingsWindow(QMainWindow):
 
         deleted_app_name = self._app_name
         self._new_apps.discard(deleted_app_name)
-        delete_app_shortcuts(self._app_name)
+        delete_app_shortcuts(deleted_app_name)
         self.app_deleted.emit(deleted_app_name)  # Notify that app was deleted
-        self.close()
+        self._rebuild_app_combo(select=(deleted_app_name, None))
+        if self.app_combo.count() == 0:
+            self._app_name = None
+            self._tab_pattern = None
+            self.table.setRowCount(0)
 
     def _populate_app_combo(self):
         all_shortcuts = get_all_shortcuts()
