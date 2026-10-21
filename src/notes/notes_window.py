@@ -200,7 +200,7 @@ class NotesWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Notes — devin/silent-exit-and-notes-search")
+        self.setWindowTitle("Notes")
         self.setWindowFlags(
             Qt.WindowType.Window
             | Qt.WindowType.WindowTitleHint
