@@ -139,6 +139,24 @@ def test_delete_tab_shortcuts(temp_data_dir):
     assert data_storage.get_tab_profiles("brave-browser") == []
 
 
+def test_delete_app_shortcuts_preserves_tabs(temp_data_dir):
+    data_storage.save_tab_shortcuts(
+        "brave-browser", "GitHub", [{"keys": "g", "description": "tab"}])
+
+    assert data_storage.delete_app_shortcuts("brave-browser") is True
+
+    data = data_storage.get_app_shortcuts("brave-browser")
+    assert data is not None
+    assert data["shortcuts"] == []
+    assert data["tabs"][0]["pattern"] == "GitHub"
+    assert data["tabs"][0]["shortcuts"][0]["keys"] == "g"
+
+
+def test_delete_app_shortcuts_removes_file_without_tabs(temp_data_dir):
+    assert data_storage.delete_app_shortcuts("brave-browser") is True
+    assert data_storage.get_app_shortcuts("brave-browser") is None
+
+
 def test_notes_last_topic_roundtrip(temp_data_dir):
     assert data_storage.get_notes_last_topic() is None
     data_storage.save_notes_last_topic("git")

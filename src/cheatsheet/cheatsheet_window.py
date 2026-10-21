@@ -183,8 +183,9 @@ class CheatsheetWindow(QMainWindow):
         tab = get_tab_shortcuts(app_name, title or "")
         if tab and tab.get("shortcuts"):
             return tab
-        if has_app_shortcuts(app_name):
-            return get_app_shortcuts(app_name)
+        data = get_app_shortcuts(app_name)
+        if data and data.get("shortcuts"):
+            return data
         return None
 
     def _display_shortcuts(self, data):
@@ -379,10 +380,21 @@ class CheatsheetWindow(QMainWindow):
                 self._display_shortcuts(data)
 
     def _on_app_deleted(self, app_name):
-        """Minimize the cheatsheet if the deleted app is currently displayed."""
-        self._deleted_apps.add(app_name)
+        """Minimize the cheatsheet if the deleted app is currently displayed.
+
+        Tab profiles survive app deletion, so re-resolve first: if a tab
+        profile still matches the focused window, keep showing it. Only apps
+        with nothing left to show are marked as deleted.
+        """
+        data = self._resolve_shortcuts(app_name, self._current_title) \
+            if app_name == self._current_app else None
+        if not data:
+            self._deleted_apps.add(app_name)
         if app_name == self._current_app:
-            self.hide()
+            if data:
+                self._display_shortcuts(data)
+            else:
+                self.hide()
 
     def _move_to_corner(self):
         try:

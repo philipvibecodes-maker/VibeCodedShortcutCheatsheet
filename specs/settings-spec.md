@@ -13,4 +13,5 @@ The application will have a settings window that will
 - have all ui elements have a brighter background when they are focused.
 - have all ui elements be accesible with mnenomics
 - Opens a menu to select an application from the list of running applications when the add application button is pressed.
-- have a button to add a tab-specific shortcut profile for the selected application, chosen from that app's open window titles; tab profiles appear as entries in the application menu and are edited and deleted like app profiles.
+- have a button to add a tab-specific shortcut profile for the selected application, chosen from the site names of that app's open windows (the domain when the window title contains a URL, otherwise the last title segment minus the browser name); the chosen name is shown in an editable dialog so the user can correct it before the profile is saved; tab profiles appear as entries in the application menu and are edited and deleted like app profiles.
+- deleting an application's shortcut list clears its app-level shortcuts but preserves its tab profiles.

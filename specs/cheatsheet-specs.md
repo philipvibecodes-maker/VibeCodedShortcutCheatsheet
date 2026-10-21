@@ -41,4 +41,6 @@ Make sure to
 ## Tab-specific shortcut profiles
 - An app profile may carry `tabs`: a list of `{"pattern", "display_name", "shortcuts"}` entries.
 - When the focused window's title contains a tab pattern (case-insensitive substring; longest pattern wins), the cheatsheet shows that tab profile's shortcuts instead of the app profile's.
+- Tab patterns are site names (e.g. "github.com", "GitHub"), so they match regardless of which specific page of the site is open.
+- Deleting an app's shortcuts preserves its tab profiles: an app with only tab profiles shows nothing unless a tab pattern matches.
 - This is meant for browsers: one `brave-browser`/`chrome.exe` profile plus per-tab profiles for sites like GitHub or Gmail.

@@ -186,17 +186,27 @@ def delete_app_shortcuts(app_name: str) -> bool:
     """
     Delete the shortcut profile for a specific application.
 
+    Tab profiles stored in the same file are preserved: when the app has
+    tabs, only its app-level shortcuts are cleared and the file is kept.
+    The file is removed only when no tab profiles remain.
+
     Args:
         app_name: The application name (e.g., 'brave-browser')
 
     Returns:
-        True if the file was deleted, False if it didn't exist.
+        True if the app profile was deleted or cleared, False if it didn't exist.
     """
     json_file = get_data_dir() / f"{app_name}.json"
-    if json_file.exists():
+    if not json_file.exists():
+        return False
+    data = get_app_shortcuts(app_name) or {}
+    if data.get("tabs"):
+        data["shortcuts"] = []
+        with open(json_file, 'w') as f:
+            json.dump(data, f, indent=2)
+    else:
         json_file.unlink()
-        return True
-    return False
+    return True
 
 
 def has_app_shortcuts(app_name: str) -> bool:

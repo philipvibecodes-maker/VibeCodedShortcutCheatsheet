@@ -84,7 +84,13 @@ def main():
     QLocalServer.removeServer(SERVER_NAME)
 
     server = QLocalServer()
-    server.listen(SERVER_NAME)
+    # World access so instances started by other users/worktrees can forward
+    # toggles instead of silently running as uncoordinated duplicates.
+    server.setSocketOptions(QLocalServer.SocketOption.WorldAccessOption)
+    if not server.listen(SERVER_NAME):
+        # Can't reach the existing socket and can't serve our own — exit
+        # rather than run a duplicate instance that opens extra windows.
+        sys.exit(0)
 
     window = CheatsheetWindow(open_settings_for_new_app=not toggle_notes_flag)
 
