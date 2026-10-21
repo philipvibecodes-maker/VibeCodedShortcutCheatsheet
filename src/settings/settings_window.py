@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLineEdit,
     QMainWindow,
     QMenu,
@@ -365,6 +366,8 @@ class SettingsWindow(QMainWindow):
         else:
             for title in titles:
                 menu.addAction(title)
+        menu.addSeparator()
+        custom_action = menu.addAction("Custom pattern…")
 
         action = menu.exec(self.add_tab_btn.mapToGlobal(
             self.add_tab_btn.rect().bottomLeft()
@@ -372,7 +375,17 @@ class SettingsWindow(QMainWindow):
         if not action or not action.isEnabled():
             return
 
-        pattern = action.text()
+        if action is custom_action:
+            pattern, ok = QInputDialog.getText(
+                self, "Add Tab Profile",
+                "Text to match in the window title\n"
+                "(e.g. 'GitHub' matches any tab whose title contains it):",
+            )
+            if not ok or not pattern.strip():
+                return
+            pattern = pattern.strip()
+        else:
+            pattern = action.text()
         if not any(t.get("pattern") == pattern for t in get_tab_profiles(app_name)):
             save_tab_shortcuts(app_name, pattern, [])
             self._new_tabs.add((app_name, pattern))
