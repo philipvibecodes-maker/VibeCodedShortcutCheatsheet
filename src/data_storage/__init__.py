@@ -146,6 +146,16 @@ def save_notes_last_topic(topic: str) -> None:
     _save_config_value("notes_last_topic", topic)
 
 
+def get_notes_last_search() -> str:
+    """Get the notes window's last search text, or '' if never set."""
+    return _get_config().get("notes_last_search", "")
+
+
+def save_notes_last_search(text: str) -> None:
+    """Save the notes window's current search text to config.json, preserving other values."""
+    _save_config_value("notes_last_search", text)
+
+
 def get_skip_delete_confirmation() -> bool:
     """Return True when the user opted out of the delete confirmation dialog."""
     return bool(_get_config().get("skip_delete_confirmation", False))

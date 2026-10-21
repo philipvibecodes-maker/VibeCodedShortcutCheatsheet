@@ -49,3 +49,18 @@ def test_selecting_topic_persists(qtbot, temp_data_dir):
     window = _make_window(qtbot)
     window.topic_list.setCurrentRow(1)
     assert data_storage.get_notes_last_topic() == "beta"
+
+
+def test_restores_last_search_selected(qtbot, temp_data_dir):
+    data_storage.add_topic("alpha")
+    data_storage.save_notes_last_search("hello")
+    window = _make_window(qtbot)
+    assert window.search_edit.text() == "hello"
+    assert window.search_edit.selectedText() == "hello"
+
+
+def test_typing_search_persists(qtbot, temp_data_dir):
+    data_storage.add_topic("alpha")
+    window = _make_window(qtbot)
+    window.search_edit.setText("abc")
+    assert data_storage.get_notes_last_search() == "abc"

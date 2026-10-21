@@ -90,7 +90,12 @@ def main():
     if not server.listen(SERVER_NAME):
         # Can't reach the existing socket and can't serve our own — exit
         # rather than run a duplicate instance that opens extra windows.
-        sys.exit(0)
+        print(
+            f"Cannot listen on '{SERVER_NAME}': {server.errorString()}\n"
+            "Another instance may be running, or a stale socket file may "
+            "exist that this user cannot remove."
+        )
+        sys.exit(1)
 
     window = CheatsheetWindow(open_settings_for_new_app=not toggle_notes_flag)
 
