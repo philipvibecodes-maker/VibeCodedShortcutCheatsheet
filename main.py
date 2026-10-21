@@ -84,7 +84,13 @@ def main():
     QLocalServer.removeServer(SERVER_NAME)
 
     server = QLocalServer()
-    server.listen(SERVER_NAME)
+    if not server.listen(SERVER_NAME):
+        print(
+            f"Cannot listen on '{SERVER_NAME}': {server.errorString()}\n"
+            "Another instance may be running, or a stale socket file may "
+            "exist that this user cannot remove."
+        )
+        sys.exit(1)
 
     window = CheatsheetWindow(open_settings_for_new_app=not toggle_notes_flag)
 

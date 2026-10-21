@@ -32,9 +32,11 @@ from src.data_storage import (
     delete_topic_entry,
     get_all_shortcuts,
     get_notes_font_size,
+    get_notes_last_search,
     get_notes_last_topic,
     get_topics,
     save_notes_font_size,
+    save_notes_last_search,
     save_notes_last_topic,
     update_topic_entry,
 )
@@ -217,6 +219,7 @@ class NotesWindow(QMainWindow):
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Search all topics and shortcuts…")
         self.search_edit.textChanged.connect(self._refresh_entries)
+        self.search_edit.textChanged.connect(save_notes_last_search)
         layout.addWidget(self.search_edit)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -282,6 +285,13 @@ class NotesWindow(QMainWindow):
 
         self._apply_font_size()
         self._refresh_topics(select=get_notes_last_topic())
+
+        # Restore the last search with the text selected, so the previous
+        # filter is visible but typing immediately replaces it.
+        last_search = get_notes_last_search()
+        if last_search:
+            self.search_edit.setText(last_search)
+            self.search_edit.selectAll()
 
     # --- data helpers -----------------------------------------------------
 
