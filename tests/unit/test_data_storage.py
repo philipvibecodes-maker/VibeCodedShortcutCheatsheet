@@ -71,6 +71,15 @@ def test_font_size_default_and_roundtrip(temp_data_dir):
     assert data_storage.get_font_size() == 18
 
 
+def test_notes_last_topic_roundtrip(temp_data_dir):
+    assert data_storage.get_notes_last_topic() is None
+    data_storage.save_notes_last_topic("git")
+    assert data_storage.get_notes_last_topic() == "git"
+    # independent of other notes config
+    data_storage.save_notes_font_size(20)
+    assert data_storage.get_notes_last_topic() == "git"
+
+
 def test_notes_font_size_independent(temp_data_dir):
     assert data_storage.get_notes_font_size() == 12
     data_storage.save_notes_font_size(20)

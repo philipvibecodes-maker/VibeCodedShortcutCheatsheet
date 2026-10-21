@@ -111,6 +111,18 @@ def test_second_launch_without_shortcuts_opens_add_shortcuts(cheatsheet):
     assert cheatsheet._settings_window.app_combo.currentData() == APP_WITHOUT_SHORTCUTS
 
 
+def test_toggle_notes_launch_keeps_windows_hidden(qtbot, mock_env):
+    """A --toggle-notes launch (open_settings_for_new_app=False) must not
+    surface the cheatsheet or the add-shortcuts settings window."""
+    window = CheatsheetWindow(open_settings_for_new_app=False)
+    qtbot.addWidget(window)
+    window._poll_timer.stop()
+    qtbot.wait(50)
+
+    assert not window.isVisible()
+    assert not _settings_visible(window)
+
+
 # --- Bug reproductions ---
 
 
