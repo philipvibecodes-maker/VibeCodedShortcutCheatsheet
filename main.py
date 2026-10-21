@@ -7,9 +7,7 @@ if sys.platform.startswith("linux"):
     os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
-from PyQt6.QtWidgets import QApplication, QMessageBox
 
-from src.cheatsheet.cheatsheet_window import CheatsheetWindow
 from src.platform import get_focused_window, is_platform_supported
 
 SERVER_NAME = "ShortcutCheatsheet"
@@ -66,13 +64,19 @@ def _register_notes_hotkey(window):
 
 
 def main():
-    app = QApplication(sys.argv)
+    # Try the single-instance toggle before paying for QtWidgets/QApplication:
+    # a second launch only needs QLocalSocket (~20 ms of imports) to message
+    # the running instance and exit.
     toggle_notes_flag = "--toggle-notes" in sys.argv
-
     if toggle_notes_flag and try_send_toggle_notes():
         sys.exit(0)
     if not toggle_notes_flag and try_send_toggle():
         sys.exit(0)
+
+    from PyQt6.QtWidgets import QApplication, QMessageBox
+    from src.cheatsheet.cheatsheet_window import CheatsheetWindow
+
+    app = QApplication(sys.argv)
 
     ok, message = is_platform_supported()
     if not ok:

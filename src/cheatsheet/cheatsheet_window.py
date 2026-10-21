@@ -15,8 +15,6 @@ from PyQt6.QtWidgets import (
 
 from src.data_storage import get_app_shortcuts, get_default_shortcuts, get_font_size, get_tab_shortcuts, has_app_shortcuts, save_app_shortcuts, save_font_size
 from src.platform import get_focused_window, get_corner_position
-from src.notes.notes_window import NotesWindow
-from src.settings.settings_window import SettingsWindow
 
 DARK_THEME = """
     QMainWindow {
@@ -32,6 +30,10 @@ DARK_THEME = """
         background-color: transparent;
     }
 """
+
+# Hoisted out of _display_shortcuts: PyQt enum-member creation is measurably
+# expensive when repeated per shortcut row.
+_KEYS_ALIGNMENT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
 
 
 class CircularButton(QPushButton):
@@ -212,7 +214,7 @@ class CheatsheetWindow(QMainWindow):
 
             keys_label = QLabel(shortcut["keys"])
             keys_label.setStyleSheet(f"font-size: {self._font_size}pt; padding: {vertical_padding}px {horizontal_padding}px;")
-            keys_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            keys_label.setAlignment(_KEYS_ALIGNMENT)
 
             self.grid_layout.addWidget(desc_label, grid_row, 0)
             self.grid_layout.addWidget(keys_label, grid_row, 1)
@@ -304,6 +306,7 @@ class CheatsheetWindow(QMainWindow):
             self._settings_window.activateWindow()
             return
 
+        from src.settings.settings_window import SettingsWindow
         self._settings_window = SettingsWindow(
             app_name=self._current_app or "default",
             focused_title=self._current_title,
@@ -317,6 +320,7 @@ class CheatsheetWindow(QMainWindow):
             self._notes_window.raise_()
             self._notes_window.activateWindow()
             return
+        from src.notes.notes_window import NotesWindow
         self._notes_window = NotesWindow()
         self._notes_window.show()
         self._notes_window.raise_()
@@ -354,6 +358,7 @@ class CheatsheetWindow(QMainWindow):
         if self._settings_window and self._settings_window.isVisible():
             self._settings_window.close()
 
+        from src.settings.settings_window import SettingsWindow
         self._settings_window = SettingsWindow(focused_title=focused_title)
         self._settings_window.shortcuts_saved.connect(self._on_shortcuts_saved)
         self._settings_window.app_deleted.connect(self._on_app_deleted)

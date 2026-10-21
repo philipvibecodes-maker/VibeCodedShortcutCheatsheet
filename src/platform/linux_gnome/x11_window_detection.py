@@ -7,7 +7,6 @@ directly, which benchmarked ~50x faster than the gdbus subprocess path
 """
 
 import ctypes
-from ctypes.util import find_library
 from typing import Optional
 
 _MISSING_DISPLAY_MESSAGE = (
@@ -15,7 +14,9 @@ _MISSING_DISPLAY_MESSAGE = (
     "Ensure DISPLAY is set and the X server is reachable."
 )
 
-_lib = ctypes.CDLL(find_library("X11") or "libX11.so.6")
+# Direct soname load — ctypes.util.find_library spawns a subprocess chain on
+# some distros and costs ~6 ms in imports even when it doesn't.
+_lib = ctypes.CDLL("libX11.so.6")
 
 _lib.XOpenDisplay.restype = ctypes.c_void_p
 _lib.XOpenDisplay.argtypes = [ctypes.c_char_p]
