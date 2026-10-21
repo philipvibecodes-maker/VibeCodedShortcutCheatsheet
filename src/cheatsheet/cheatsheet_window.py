@@ -231,15 +231,15 @@ class CheatsheetWindow(QMainWindow):
         self.setFixedSize(self.sizeHint())
         self.setMinimumSize(0, 0)
         self.setMaximumSize(16777215, 16777215)
-        QTimer.singleShot(50, self._position_close_button)
-        QTimer.singleShot(50, self._move_to_corner)
+        self._position_close_button()
+        self._move_to_corner()
 
     def showEvent(self, event):
         super().showEvent(event)
         if not self._initial_move_done:
             self._initial_move_done = True
-            QTimer.singleShot(50, self._position_close_button)
-            QTimer.singleShot(100, self._move_to_corner)
+            self._position_close_button()
+            self._move_to_corner()
 
     def keyPressEvent(self, event):
         key = event.key()
@@ -295,8 +295,8 @@ class CheatsheetWindow(QMainWindow):
         self.setFixedSize(self.sizeHint())
         self.setMinimumSize(0, 0)
         self.setMaximumSize(16777215, 16777215)
-        QTimer.singleShot(50, self._position_close_button)
-        QTimer.singleShot(50, self._move_to_corner)
+        self._position_close_button()
+        self._move_to_corner()
 
     def _open_settings(self):
         if self._settings_window and self._settings_window.isVisible():
