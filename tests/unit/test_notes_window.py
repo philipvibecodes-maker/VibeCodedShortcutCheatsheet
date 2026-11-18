@@ -159,8 +159,8 @@ def test_animation_starts_immediately_without_waiting_for_exposure(
     if strategy == "slide":
         window.close()
         return
-    for elapsed, expected in ((0, 0), (250, 0.15625), (500, 0.5),
-                              (750, 0.84375), (1000, 1)):
+    for elapsed, expected in ((0, 0), (250, 0.578125), (500, 0.875),
+                              (750, 0.984375), (1000, 1)):
         window._fade_in.setCurrentTime(elapsed)
         assert window._fade_overlay.progress == pytest.approx(expected, abs=0.005)
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
@@ -284,7 +284,7 @@ def test_slide_strategy_moves_down_and_persists(qtbot, temp_data_dir):
     assert not window._fade_overlay.isVisible()
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
     window._fade_in.setCurrentTime(500)
-    assert window.y() == round((window._slide_start_y + target.y()) / 2)
+    assert window.y() == round(window._slide_start_y + (target.y() - window._slide_start_y) * 0.875)
     window._fade_in.setCurrentTime(1000)
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
     assert window.pos() == target
@@ -293,3 +293,12 @@ def test_slide_strategy_moves_down_and_persists(qtbot, temp_data_dir):
     assert restored.animation_actions['slide'].isChecked()
     restored.animation_actions['fade'].trigger()
     assert data_storage.get_notes_animation_strategy() == 'fade'
+
+
+def test_opening_has_no_slow_start():
+    from src.notes.notes_window import _fade_easing
+    # First 1% of time already makes visible progress, with no initial hold.
+    assert _fade_easing(0) == 0
+    assert _fade_easing(0.01) > 0.025
+    assert _fade_easing(0.05) > 0.14
+    assert _fade_easing(1) == 1

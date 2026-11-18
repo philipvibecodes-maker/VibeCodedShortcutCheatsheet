@@ -120,8 +120,8 @@ SHORTCUT_TOPIC_PREFIX = "shortcuts/"
 
 
 def _fade_easing(progress):
-    """Smoothstep: continuous opacity and velocity, with gentle endpoints."""
-    return progress * progress * (3.0 - 2.0 * progress)
+    """Move immediately, then settle gently without a slow-start dead zone."""
+    return 1.0 - (1.0 - progress) ** 3
 
 
 class _FadeOverlay(QWidget):
