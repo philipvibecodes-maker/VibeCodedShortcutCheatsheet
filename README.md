@@ -140,3 +140,5 @@ Starting with revision 2, Slide from top uses a frameless host that bypasses GNO
 Revision 4 keeps that same host after the slide completes, avoiding a window remap and shadow change at the end. In slide mode, Minimize hides notes; use the notes hotkey to reopen them.
 
 Revision 5 adds **Background blur opacity** in the Notes menu (0–100%, default 60%; saved as `notes_backdrop_opacity`). The backdrop fades in with either animation, and opacity adjustments apply immediately. At 0 it is invisible. Clicking the backdrop closes notes. A desktop snapshot is captured and blurred once per opening, kept only in memory, and discarded on close; it does not track desktop changes while notes is open. On systems that block desktop capture (including some GNOME/Wayland configurations), the backdrop uses dimming instead of blur.
+
+Revision 6 cuts the notes window out of the backdrop's native mask, keeping notes sharp regardless of stacking order. The clear area follows sliding, dragging, and resizing.

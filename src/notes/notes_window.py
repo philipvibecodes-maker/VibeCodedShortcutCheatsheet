@@ -3,7 +3,7 @@
 from functools import partial
 
 from PyQt6.QtCore import QEasingCurve, QEvent, QPoint, QTimeLine, Qt, QTimer
-from PyQt6.QtGui import QActionGroup, QColor, QFont, QKeySequence, QPalette, QShortcut
+from PyQt6.QtGui import QActionGroup, QColor, QFont, QKeySequence, QPalette, QRegion, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -373,6 +373,7 @@ class NotesWindow(QMainWindow):
         self._slide_surface = None
         self._backdrop = None
         self._opening_progress = 1.0
+        self.installEventFilter(self)
         self._slide_handoff = False
         self._slide_target = None
         self._fade_in.valueChanged.connect(self._animate_opening)
@@ -761,6 +762,10 @@ class NotesWindow(QMainWindow):
         self.table.horizontalHeader().setFont(font)
 
     def eventFilter(self, obj, event):
+        if obj is self or obj is self._slide_surface:
+            if event.type() in (QEvent.Type.Move, QEvent.Type.Resize):
+                self._update_backdrop_mask()
+            return super().eventFilter(obj, event)
         # Item views consume '/' for their own keyboard search; intercept it
         # to focus the search bar instead.
         if (
@@ -832,7 +837,15 @@ class NotesWindow(QMainWindow):
 
     def _update_backdrop(self):
         if self._backdrop is not None:
+            self._update_backdrop_mask()
             self._backdrop.setStrength(self._opening_progress * self.backdrop_slider.value() / 100)
+
+    def _update_backdrop_mask(self):
+        if self._backdrop is not None:
+            surface = self._slide_surface or self
+            exclusion = surface.rect().translated(
+                surface.mapToGlobal(QPoint(0, 0)) - self._backdrop.pos())
+            self._backdrop.setMask(QRegion(self._backdrop.rect()).subtracted(QRegion(exclusion)))
 
     def _remove_backdrop(self):
         if self._backdrop is not None:
@@ -862,6 +875,7 @@ class NotesWindow(QMainWindow):
             surface.resize(self.size())
             surface.move(self._slide_target.x(), self._slide_start_y)
             self._slide_surface = surface
+            surface.installEventFilter(self)
             self.title_bar._restore_geometry = None
             self._normal_window_flags = self.windowFlags()
             self.setParent(surface, Qt.WindowType.Widget)
@@ -871,6 +885,7 @@ class NotesWindow(QMainWindow):
             surface_layout.addWidget(self)
             super().show()
             surface.show()
+            self._update_backdrop_mask()
             surface.activateWindow()
             self.search_edit.setFocus()
             self._fade_in.start()

@@ -413,3 +413,28 @@ def test_backdrop_disabled_and_dismissed_by_click(qtbot, temp_data_dir):
     qtbot.mouseClick(backdrop, Qt.MouseButton.LeftButton)
     assert not window.isVisible()
     assert window._backdrop is None
+
+
+@pytest.mark.parametrize('strategy', ['fade', 'slide'])
+def test_backdrop_never_covers_notes_and_tracks_window(qtbot, temp_data_dir, strategy):
+    from PyQt6.QtCore import QPoint
+    from PyQt6.QtGui import QRegion
+    data_storage.save_notes_animation_strategy(strategy)
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window = _make_window(qtbot)
+    window.show()
+    window._fade_in.setCurrentTime(1000)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    backdrop = window._backdrop
+    surface = window._slide_surface or window
+
+    def check_exclusion():
+        rect = surface.rect().translated(surface.mapToGlobal(QPoint()) - backdrop.pos())
+        assert backdrop.mask().intersected(QRegion(rect)).isEmpty()
+        assert not backdrop.mask().isEmpty()
+        assert backdrop.mask().contains(QPoint(0, 0))
+
+    check_exclusion()
+    surface.move(surface.x() + 20, surface.y() + 20)
+    surface.resize(surface.width() - 40, surface.height() - 40)
+    check_exclusion()
