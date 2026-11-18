@@ -17,3 +17,4 @@ The application has a notes window, separate from the cheatsheet window, that wi
 - persist topics to `data/topics.json` immediately on every change.
 
 - offer exclusive Fade reveal and Slide from top choices under Notes → Animation, persisted as `notes_animation_strategy` (default `fade`, alternative `slide`). Both use the duration slider; changes apply on the next opening. Slide moves the fully opaque window from above the available screen to its centered position with the same easing, and restores the final position when interrupted.
+- expose Startup speed (1–6; default 3), saved as `notes_animation_startup_speed` and applied on the next opening to both strategies. Use ease-out progress `1 - (1 - t)^speed`; speed 1 is linear. Invalid saved values fall back to 3. The duration slider must consume all four arrow keys without changing its value; mouse dragging and other slider keys remain available.

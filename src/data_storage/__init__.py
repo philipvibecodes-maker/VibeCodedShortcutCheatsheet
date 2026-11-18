@@ -159,6 +159,15 @@ def save_notes_animation_strategy(strategy: str) -> None:
     _save_config_value("notes_animation_strategy", strategy)
 
 
+def get_notes_animation_startup_speed() -> int:
+    speed = _get_config().get("notes_animation_startup_speed", 3)
+    return speed if type(speed) is int and 1 <= speed <= 6 else 3
+
+
+def save_notes_animation_startup_speed(speed: int) -> None:
+    _save_config_value("notes_animation_startup_speed", speed)
+
+
 def get_notes_last_topic() -> Optional[str]:
     """Get the topic the notes window last showed, or None if never set."""
     return _get_config().get("notes_last_topic")

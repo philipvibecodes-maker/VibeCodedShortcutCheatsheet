@@ -1,9 +1,12 @@
 """Large centered window for recording and searching key/value notes under topics."""
 
+from functools import partial
+
 from PyQt6.QtCore import QEasingCurve, QEvent, QTimeLine, Qt, QTimer
 from PyQt6.QtGui import QActionGroup, QColor, QFont, QKeySequence, QPainter, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
     QDialog,
     QHBoxLayout,
     QHeaderView,
@@ -35,12 +38,14 @@ from src.data_storage import (
     get_all_shortcuts,
     get_notes_fade_in_duration_ms,
     get_notes_animation_strategy,
+    get_notes_animation_startup_speed,
     get_notes_font_size,
     get_notes_last_search,
     get_notes_last_topic,
     get_topics,
     save_notes_fade_in_duration_ms,
     save_notes_animation_strategy,
+    save_notes_animation_startup_speed,
     save_notes_font_size,
     save_notes_last_search,
     save_notes_last_topic,
@@ -119,9 +124,23 @@ DARK_THEME = """
 SHORTCUT_TOPIC_PREFIX = "shortcuts/"
 
 
-def _fade_easing(progress):
+def _fade_easing(progress, startup_speed=3):
     """Move immediately, then settle gently without a slow-start dead zone."""
-    return 1.0 - (1.0 - progress) ** 3
+    return 1.0 - (1.0 - progress) ** startup_speed
+
+
+# PyQt limits distinct custom easing callbacks; reuse these across openings.
+_STARTUP_CURVES = {speed: partial(_fade_easing, startup_speed=speed)
+                   for speed in range(1, 7)}
+
+
+class _DurationSlider(QSlider):
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Left, Qt.Key.Key_Right,
+                           Qt.Key.Key_Up, Qt.Key.Key_Down):
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
 
 class _FadeOverlay(QWidget):
@@ -289,7 +308,7 @@ class NotesWindow(QMainWindow):
         fade_layout = QVBoxLayout(fade_controls)
         self.fade_duration_label = QLabel()
         fade_layout.addWidget(self.fade_duration_label)
-        self.fade_duration_slider = QSlider(Qt.Orientation.Horizontal)
+        self.fade_duration_slider = _DurationSlider(Qt.Orientation.Horizontal)
         self.fade_duration_slider.setRange(0, 1000)
         self.fade_duration_slider.setSingleStep(10)
         self.fade_duration_slider.setPageStep(100)
@@ -304,6 +323,21 @@ class NotesWindow(QMainWindow):
         self.fade_duration_slider.valueChanged.connect(self._save_fade_duration)
         self.fade_duration_label.setBuddy(self.fade_duration_slider)
         fade_layout.addWidget(self.fade_duration_slider)
+        startup_label = QLabel("Startup &speed:")
+        fade_layout.addWidget(startup_label)
+        self.startup_speed_combo = QComboBox()
+        for speed in range(1, 7):
+            label = f"{speed}" + (" (linear)" if speed == 1 else " (default)" if speed == 3 else "")
+            self.startup_speed_combo.addItem(label, speed)
+        self.startup_speed_combo.setCurrentIndex(get_notes_animation_startup_speed() - 1)
+        self.startup_speed_combo.setToolTip(
+            "Higher values start faster and settle more slowly. Applies next opening."
+        )
+        self.startup_speed_combo.currentIndexChanged.connect(
+            lambda index: save_notes_animation_startup_speed(index + 1)
+        )
+        startup_label.setBuddy(self.startup_speed_combo)
+        fade_layout.addWidget(self.startup_speed_combo)
         fade_action = QWidgetAction(notes_menu)
         fade_action.setDefaultWidget(fade_controls)
         notes_menu.addAction(fade_action)
@@ -667,6 +701,13 @@ class NotesWindow(QMainWindow):
             return
         self._fade_in.stop()
         duration = get_notes_fade_in_duration_ms()
+        speed = get_notes_animation_startup_speed()
+        self.startup_speed_combo.blockSignals(True)
+        self.startup_speed_combo.setCurrentIndex(speed - 1)
+        self.startup_speed_combo.blockSignals(False)
+        easing = QEasingCurve()
+        easing.setCustomType(_STARTUP_CURVES[speed])
+        self._fade_in.setEasingCurve(easing)
         self._animation_strategy = get_notes_animation_strategy()
         self.animation_actions[self._animation_strategy].setChecked(True)
         self._fade_in.setDuration(max(1, duration))

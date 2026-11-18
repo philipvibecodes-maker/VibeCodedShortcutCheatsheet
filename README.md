@@ -127,3 +127,5 @@ See `CLAUDE.md` for development guidelines and architectural decisions.
 [Add your license here]
 
 Choose **Notes → Animation → Fade reveal** or **Slide from top** in the notes window. The choice is saved as `notes_animation_strategy` (`fade` or `slide`). Both modes use the **Animation duration** slider and apply on the next opening; 0 disables animation. Slide moves the whole window down from above the screen to its centered position.
+
+The Notes menu also has a **Startup speed** control (1–6, default 3). Higher values make either animation progress faster at the start and settle more slowly, while keeping the selected total duration. The setting saves automatically and applies on the next opening. The duration slider ignores arrow keys; drag it with the mouse or use Home/End and Page Up/Page Down.

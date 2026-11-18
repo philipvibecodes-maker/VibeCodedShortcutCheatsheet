@@ -262,9 +262,10 @@ def test_fade_slider_in_notes_menu_supports_keyboard(qtbot, temp_data_dir):
     menu = window.menuBar().actions()[0].menu()
     menu.popup(window.menuBar().mapToGlobal(window.menuBar().rect().bottomLeft()))
     qtbot.waitUntil(lambda: window.fade_duration_slider.hasFocus())
-    qtbot.keyClick(window.fade_duration_slider, Qt.Key.Key_Right)
-    assert data_storage.get_notes_fade_in_duration_ms() == 10
-    assert "10 ms" in window.fade_duration_label.text()
+    for key in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down):
+        qtbot.keyClick(window.fade_duration_slider, key)
+        assert window.fade_duration_slider.value() == 0
+        assert data_storage.get_notes_fade_in_duration_ms() == 0
     qtbot.keyClick(window.fade_duration_slider, Qt.Key.Key_End)
     assert data_storage.get_notes_fade_in_duration_ms() == 1000
     qtbot.keyClick(window.fade_duration_slider, Qt.Key.Key_Home)
@@ -302,3 +303,14 @@ def test_opening_has_no_slow_start():
     assert _fade_easing(0.01) > 0.025
     assert _fade_easing(0.05) > 0.14
     assert _fade_easing(1) == 1
+
+
+@pytest.mark.parametrize("speed", [1, 3, 6])
+def test_startup_speed_saves_and_applies(qtbot, temp_data_dir, speed):
+    window = _make_window(qtbot)
+    window.startup_speed_combo.setCurrentIndex(speed - 1)
+    assert data_storage.get_notes_animation_startup_speed() == speed
+    restored = _make_window(qtbot)
+    assert restored.startup_speed_combo.currentData() == speed
+    restored.show()
+    assert restored._fade_in.easingCurve().valueForProgress(0.5) == pytest.approx(1 - 0.5 ** speed)
