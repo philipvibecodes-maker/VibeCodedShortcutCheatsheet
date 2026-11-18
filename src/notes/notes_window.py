@@ -19,7 +19,6 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMenuBar,
-    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -325,8 +324,6 @@ class NotesEditDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         editor = QPlainTextEdit(parent) if self.multiline else QLineEdit(parent)
         self.notes._active_editor = (self, editor, index)
-        self.notes.search_edit.setEnabled(False)
-        self.notes.topic_list.setEnabled(False)
         return editor
 
     def updateEditorGeometry(self, editor, option, index):
@@ -343,7 +340,8 @@ class NotesEditDelegate(QStyledItemDelegate):
 
     def valid(self, editor):
         if not self.multiline and not editor.text().strip():
-            self.notes.feedback.setText("A note key cannot be empty.")
+            editor.setToolTip("A note key cannot be empty.")
+            editor.setAccessibleDescription("A note key cannot be empty.")
             editor.setFocus()
             return False
         return True
@@ -355,15 +353,16 @@ class NotesEditDelegate(QStyledItemDelegate):
     def destroyEditor(self, editor, index):
         if self.notes._active_editor and self.notes._active_editor[1] is editor:
             self.notes._active_editor = None
-        if self.notes._active_editor is None:
-            self.notes.search_edit.setEnabled(True)
-            self.notes.topic_list.setEnabled(True)
         super().destroyEditor(editor, index)
 
     def eventFilter(self, editor, event):
         if event.type() == QEvent.Type.FocusOut:
-            # A temporary app switch must not commit or discard an edit.
-            return True
+            if event.reason() == Qt.FocusReason.PopupFocusReason:
+                return super().eventFilter(editor, event)
+            active = self.notes._active_editor
+            if active and active[1] is editor and not self.valid(editor):
+                return True
+            return super().eventFilter(editor, event)
         if event.type() == QEvent.Type.KeyPress:
             if event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab):
                 return not self.valid(editor) or super().eventFilter(editor, event)
@@ -599,58 +598,23 @@ class NotesWindow(QMainWindow):
         self.new_topic_btn = QPushButton("New &topic")
         self.new_topic_btn.clicked.connect(self._new_topic)
         buttons.addWidget(self.new_topic_btn)
-
-        self.delete_topic_btn = QPushButton("&Delete topic")
-        self.delete_topic_btn.clicked.connect(self._delete_topic)
-        buttons.addWidget(self.delete_topic_btn)
-
         buttons.addStretch()
-
-        self.new_entry_btn = QPushButton("New e&ntry")
-        self.new_entry_btn.clicked.connect(self._new_entry)
-        buttons.addWidget(self.new_entry_btn)
-
-        self.edit_entry_btn = QPushButton("Ed&it entry")
-        self.edit_entry_btn.clicked.connect(self._edit_entry)
-        buttons.addWidget(self.edit_entry_btn)
-
-        self.delete_entry_btn = QPushButton("De&lete entry")
-        self.delete_entry_btn.clicked.connect(self._delete_entry)
-        buttons.addWidget(self.delete_entry_btn)
-        manage = QToolButton()
-        manage.setText("Manage")
-        manage.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        manage_menu = QMenu(manage)
-        for button in (self.new_topic_btn, self.delete_topic_btn, self.new_entry_btn, self.delete_entry_btn):
-            button.hide()
-            action = manage_menu.addAction(button.text())
-            action.triggered.connect(button.click)
-            # Keep menu availability synchronized with existing action guards.
-            manage_menu.aboutToShow.connect(lambda b=button, a=action: a.setEnabled(b.isEnabled()))
-        manage.setMenu(manage_menu)
-        buttons.addWidget(manage)
-        self.copy_btn = QPushButton("Copy value")
-        self.copy_btn.setToolTip("Copy the complete value (Ctrl+Shift+C)")
-        self.copy_btn.clicked.connect(self._copy_value)
-        buttons.addWidget(self.copy_btn)
         buttons.addWidget(QSizeGrip(self))
-        self.management = QWidget()
-        self.management.setLayout(buttons)
-        layout.addWidget(self.management)
-        self.feedback = QLabel("↑↓ Select   Double-click / Enter Edit cell   Ctrl+Shift+C Copy   Esc Close")
-        self.feedback.setWordWrap(True)
-        layout.addWidget(self.feedback)
-        self._feedback_timer = QTimer(self)
-        self._feedback_timer.setSingleShot(True)
-        self._feedback_timer.setInterval(1600)
-        self._feedback_timer.timeout.connect(self._restore_feedback)
+        layout.addLayout(buttons)
+
+        # Keep other note operations available without a bottom toolbar.
+        notes_menu.addSeparator()
+        self.new_entry_action = notes_menu.addAction("New entry", self._new_entry)
+        self.edit_entry_action = notes_menu.addAction("Edit entry", self._edit_entry)
+        self.delete_entry_action = notes_menu.addAction("Delete entry", self._delete_entry)
+        self.delete_topic_action = notes_menu.addAction("Delete topic", self._delete_topic)
+        self.copy_action = notes_menu.addAction("Copy value", self._copy_value)
 
         QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
         QShortcut(QKeySequence("Ctrl+="), self, activated=lambda: self._change_font_size(1))
         QShortcut(QKeySequence("Ctrl++"), self, activated=lambda: self._change_font_size(1))
         QShortcut(QKeySequence("Ctrl+-"), self, activated=lambda: self._change_font_size(-1))
         QShortcut(QKeySequence("Ctrl+T"), self, activated=self._new_topic)
-        QShortcut(QKeySequence("Alt+T"), self, activated=self._new_topic)
         QShortcut(QKeySequence("Alt+N"), self, activated=self._new_entry)
         QShortcut(QKeySequence("Alt+I"), self, activated=self._edit_entry)
         QShortcut(QKeySequence("Alt+D"), self, activated=self._delete_topic)
@@ -699,20 +663,15 @@ class NotesWindow(QMainWindow):
         self.empty_label.setText("No matching notes." if self.search_edit.text().strip()
                                  else "No notes in this topic.")
         self.empty_label.setVisible(not self.table.rowCount())
-        self.copy_btn.setEnabled(value is not None)
+        self.copy_action.setEnabled(value is not None)
         topic, _ = self._selected_entry()
-        self.edit_entry_btn.setEnabled(topic is not None)
-        self.delete_entry_btn.setEnabled(topic is not None)
+        self.edit_entry_action.setEnabled(topic is not None)
+        self.delete_entry_action.setEnabled(topic is not None)
 
     def _copy_value(self):
         value = self._selected_value()
         if value is not None:
             QApplication.clipboard().setText(value)
-            self.feedback.setText("Value copied.")
-            self._feedback_timer.start()
-
-    def _restore_feedback(self):
-        self.feedback.setText("↑↓ Select   Double-click / Enter Edit cell   Ctrl+Shift+C Copy   Esc Close")
 
     def _commit_editor(self):
         if not self._active_editor:
@@ -721,22 +680,21 @@ class NotesWindow(QMainWindow):
         if not delegate.valid(editor):
             return False
         delegate.setModelData(editor, self.table.model(), index)
-        delegate.closeEditor.emit(editor, QStyledItemDelegate.EndEditHint.NoHint)
         self._active_editor = None
+        delegate.closeEditor.emit(editor, QStyledItemDelegate.EndEditHint.NoHint)
         return True
 
     def _escape(self):
         if self._active_editor:
             delegate, editor, _ = self._active_editor
-            delegate.closeEditor.emit(editor, QStyledItemDelegate.EndEditHint.RevertModelCache)
             self._active_editor = None
+            delegate.closeEditor.emit(editor, QStyledItemDelegate.EndEditHint.RevertModelCache)
             self.search_edit.setFocus()
         else:
             self.close()
 
     def _dismiss_from_backdrop(self):
-        if not self._active_editor:
-            self.close()
+        self.close()
 
     # --- data helpers -----------------------------------------------------
 
@@ -770,6 +728,11 @@ class NotesWindow(QMainWindow):
     # --- UI refresh -------------------------------------------------------
 
     def _on_topic_changed(self, current, previous):
+        if not self._commit_editor():
+            self.topic_list.blockSignals(True)
+            self.topic_list.setCurrentItem(previous)
+            self.topic_list.blockSignals(False)
+            return
         if current is not None:
             save_notes_last_topic(current.data(Qt.ItemDataRole.UserRole))
         if self.search_edit.text():
@@ -796,6 +759,10 @@ class NotesWindow(QMainWindow):
         self._refresh_entries()
 
     def _refresh_entries(self):
+        # Topic/search signals can arrive before the editor's FocusOut event.
+        # Persist the old row before clearing the model that owns its index.
+        if not self._commit_editor():
+            return
         query = self.search_edit.text().strip().lower()
         searching = bool(query)
 
@@ -851,11 +818,11 @@ class NotesWindow(QMainWindow):
             self.table.setCurrentCell(selected_row, 0)
         self._update_selection_actions()
         readonly = self._is_readonly_topic(self._current_topic()) or searching
-        self.new_entry_btn.setEnabled(not readonly)
+        self.new_entry_action.setEnabled(not readonly)
         topic, index = self._selected_entry()
-        self.edit_entry_btn.setEnabled(topic is not None)
-        self.delete_entry_btn.setEnabled(topic is not None)
-        self.delete_topic_btn.setEnabled(not self._is_readonly_topic(self._current_topic()))
+        self.edit_entry_action.setEnabled(topic is not None)
+        self.delete_entry_action.setEnabled(topic is not None)
+        self.delete_topic_action.setEnabled(not self._is_readonly_topic(self._current_topic()))
 
     # --- actions ----------------------------------------------------------
 
@@ -969,7 +936,9 @@ class NotesWindow(QMainWindow):
         key = self.table.item(item.row(), 1).text()
         value = self.table.item(item.row(), 2).text()
         update_topic_entry(topic, index, key, value)
-        self.table.resizeRowToContents(item.row())
+        # Finish the focus/click event before changing row geometry, otherwise
+        # a click meant for the following row can land in the edited row.
+        self._row_resize_timer.start(0)
         self._update_selection_actions()
 
     def _delete_entry(self):

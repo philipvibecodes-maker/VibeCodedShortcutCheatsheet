@@ -90,3 +90,13 @@ The application has a notes window, separate from the cheatsheet window, that wi
   An empty search still shows only the selected topic's entries; nonempty search still spans all
   topics. Topic cells are always read-only. Keep key/value editing, multiline values and full-value
   copying aligned to their fixed columns.
+
+## Revision 18 — simpler footer and save on cell exit
+
+- Remove bottom keyboard hints, Edit entry / Manage / Copy value buttons and copy feedback.
+  Show a New topic button. Keep other note operations in the Notes menu and existing shortcuts.
+- Leaving a key/value editor commits valid edits immediately, including clicking another cell,
+  search, a topic, or switching applications. Keep search and topic controls enabled while editing.
+  Retain Escape cancellation and reject empty keys with feedback attached to the editor.
+  Opening an editor's context menu does not end the edit.
+- Live tests and screenshots are deferred at the user's request; use offscreen regression tests.

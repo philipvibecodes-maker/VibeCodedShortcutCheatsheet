@@ -58,7 +58,7 @@ def test_search_order_selection_full_values_and_copy(notes, qtbot):
     qtbot.keyClick(notes.search_edit, Qt.Key.Key_Return)
     assert notes.table.hasFocus()
     notes.search_edit.setText('does not exist')
-    assert not notes.copy_btn.isEnabled()
+    assert not notes.copy_action.isEnabled()
     assert notes.table.rowCount() == 0
     assert notes.empty_label.isVisible()
     assert 'No matching' in notes.empty_label.text()
@@ -69,7 +69,7 @@ def test_inline_edit_cancel_validation_commit_and_focus_safety(notes, qtbot):
     delegate, editor, _ = notes._active_editor
     editor.setText('')
     assert not notes._commit_editor()
-    assert 'empty' in notes.feedback.text()
+    assert 'empty' in editor.toolTip()
     notes.close()
     assert notes.isVisible()
     notes._close_if_unfocused()
@@ -114,7 +114,7 @@ def test_global_edit_and_readonly_shortcuts(notes, qtbot):
     qtbot.wait(10)
     assert storage.get_topics()['beta'][0]['key'] == 'Renamed'
     notes.search_edit.setText('shortcut')
-    assert not notes.edit_entry_btn.isEnabled()
+    assert not notes.edit_entry_action.isEnabled()
     notes._edit_value()
     assert notes._active_editor is None
     notes._copy_value()
@@ -192,7 +192,7 @@ def test_double_click_and_enter_edit_focused_cells(notes, qtbot):
 
 def test_edit_action_uses_current_value_cell(notes):
     notes.table.setCurrentCell(0, 2)
-    notes.edit_entry_btn.click()
+    notes.edit_entry_action.trigger()
     assert isinstance(notes._active_editor[1], QPlainTextEdit)
 
 
@@ -244,3 +244,73 @@ def test_topic_column_stays_visible_and_readonly_with_or_without_search(notes):
             assert not topic_item.flags() & Qt.ItemFlag.ItemIsEditable
             assert notes.table.item(row, 1).text() == storage.get_topics()[topic][index]['key']
             assert notes.table.item(row, 2).text() == storage.get_topics()[topic][index]['value']
+
+
+@pytest.mark.parametrize('column,text', [(1, 'Renamed note'), (2, 'Saved on exit\nSecond line\n')])
+def test_leaving_cell_saves_edit(notes, qtbot, column, text):
+    notes.table.setCurrentCell(0, column)
+    notes.table.setFocus()
+    qtbot.keyClick(notes.table, Qt.Key.Key_Return)
+    _, editor, _ = notes._active_editor
+    if column == 1:
+        editor.setText(text)
+    else:
+        editor.setPlainText(text)
+    qtbot.mouseClick(notes.search_edit, Qt.MouseButton.LeftButton)
+    qtbot.wait(20)
+    assert notes._active_editor is None
+    assert storage.get_topics()['alpha'][0]['key' if column == 1 else 'value'] == text
+    assert notes.table.item(0, column).text() == text
+
+
+def test_simplified_footer_and_new_topic_button(notes, qtbot, monkeypatch):
+    from PyQt6.QtWidgets import QPushButton
+    assert notes.new_topic_btn.isVisible()
+    assert not hasattr(notes, 'feedback')
+    assert not hasattr(notes, 'copy_btn')
+    assert not hasattr(notes, 'edit_entry_btn')
+    assert not any(b.isVisible() and b.text() in ('Manage', 'Copy value', 'Edit entry')
+                   for b in notes.findChildren(QPushButton))
+    called = []
+    monkeypatch.setattr(notes, '_exec_dialog', lambda dialog: (called.append(dialog.windowTitle()), 0)[1])
+    notes.new_topic_btn.click()
+    assert called == ['New topic']
+
+
+def test_leaving_value_for_another_cell_saves(notes, qtbot):
+    notes._edit_value()
+    notes._active_editor[1].setPlainText('Saved before selecting another row')
+    qtbot.wait(20)
+    item = notes.table.item(1, 1)
+    qtbot.mouseClick(notes.table.viewport(), Qt.MouseButton.LeftButton,
+                     pos=notes.table.visualItemRect(item).center())
+    qtbot.wait(20)
+    assert notes._active_editor is None
+    assert storage.get_topics()['alpha'][0]['value'] == 'Saved before selecting another row'
+    assert notes.table.item(0, 2).text() == 'Saved before selecting another row'
+
+
+def test_leaving_value_for_topic_selection_saves_before_refresh(notes, qtbot):
+    notes.topics_btn.setChecked(True)
+    notes._edit_value()
+    notes._active_editor[1].setPlainText('Saved before changing topic')
+    qtbot.wait(20)
+    item = notes.topic_list.item(1)
+    qtbot.mouseClick(notes.topic_list.viewport(), Qt.MouseButton.LeftButton,
+                     pos=notes.topic_list.visualItemRect(item).center())
+    qtbot.wait(20)
+    assert notes._active_editor is None
+    assert storage.get_topics()['alpha'][0]['value'] == 'Saved before changing topic'
+    assert notes._current_topic() == 'beta'
+    assert notes.table.item(0, 0).text() == 'beta'
+
+
+def test_invalid_key_does_not_overwrite_saved_key_on_exit(notes, qtbot):
+    notes._edit_entry()
+    editor = notes._active_editor[1]
+    editor.setText('')
+    qtbot.mouseClick(notes.search_edit, Qt.MouseButton.LeftButton)
+    qtbot.wait(20)
+    assert storage.get_topics()['alpha'][0]['key'] == 'First'
+    assert notes._active_editor is not None
+    notes._escape()

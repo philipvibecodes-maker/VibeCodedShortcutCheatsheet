@@ -133,7 +133,7 @@ with tempfile.TemporaryDirectory() as temporary:
     assert window.table.hasFocus()
     QTest.keyClick(window.table, Qt.Key.Key_Return)
     assert window._active_editor is None
-    assert not window.edit_entry_btn.isEnabled()
+    assert not window.edit_entry_action.isEnabled()
     window._copy_value()
     assert app.clipboard().text() == 'Ctrl+P'
     window.close()
