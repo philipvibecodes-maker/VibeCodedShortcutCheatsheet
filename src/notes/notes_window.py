@@ -16,14 +16,17 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenuBar,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSlider,
+    QSizeGrip,
     QSplitter,
     QStyledItemDelegate,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
     QWidgetAction,
@@ -141,6 +144,70 @@ class _DurationSlider(QSlider):
             event.accept()
             return
         super().keyPressEvent(event)
+
+
+class _TitleBar(QWidget):
+    """One persistent title bar for both the sliding host and final window."""
+
+    def __init__(self, notes):
+        super().__init__(notes)
+        self.notes = notes
+        self.setMinimumHeight(32)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 0, 4, 0)
+        title = QLabel("Notes")
+        title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        layout.addWidget(title)
+        layout.addStretch()
+        for text, name, callback in (
+            ("−", "Minimize", self._minimize),
+            ("□", "Maximize or restore", self._toggle_maximized),
+            ("×", "Close", notes.close),
+        ):
+            button = QToolButton(self)
+            button.setText(text)
+            button.setAccessibleName(name)
+            button.setToolTip(name)
+            button.setStyleSheet(
+                "QToolButton { color: #e0e0e0; background: transparent; border: none; padding: 6px 10px; }"
+                "QToolButton:hover { background: #555; }"
+            )
+            button.clicked.connect(callback)
+            layout.addWidget(button)
+
+    def _minimize(self):
+        if self.notes._slide_surface is not None:
+            self.notes._fade_in.stop()
+            self.notes._finish_opening()
+        self.notes.showMinimized()
+
+    def _toggle_maximized(self):
+        if self.notes._slide_surface is not None:
+            self.notes._fade_in.stop()
+            self.notes._finish_opening()
+        if self.notes.isMaximized():
+            self.notes.showNormal()
+        else:
+            self.notes.showMaximized()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self.notes._slide_surface is not None:
+                self.notes._fade_in.stop()
+                self.notes._finish_opening()
+            handle = self.window().windowHandle()
+            if handle is not None:
+                handle.startSystemMove()
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._toggle_maximized()
+            event.accept()
+        else:
+            super().mouseDoubleClickEvent(event)
 
 
 class _FadeOverlay(QWidget):
@@ -261,6 +328,7 @@ class NotesWindow(QMainWindow):
         self.setWindowTitle("Notes")
         self.setWindowFlags(
             Qt.WindowType.Window
+            | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowTitleHint
             | Qt.WindowType.WindowSystemMenuHint
             | Qt.WindowType.WindowMinimizeButtonHint
@@ -269,7 +337,7 @@ class NotesWindow(QMainWindow):
         )
         # GNOME animates normal windows when mapped. Utility windows appear
         # immediately; this X11 hint also works under XWayland and is ignored
-        # on other platforms. Keep the normal Qt title bar and window controls.
+        # on other platforms. The in-app title bar also travels with the slide.
         self.setAttribute(Qt.WidgetAttribute.WA_X11NetWmWindowTypeUtility)
         # Fade a simple painted cover inside Qt; GNOME sees an opaque window.
         self._fade_overlay = _FadeOverlay(self)
@@ -289,6 +357,15 @@ class NotesWindow(QMainWindow):
         self.setStyleSheet(DARK_THEME)
         self._font_size = get_notes_font_size()
 
+        chrome = QWidget(self)
+        chrome_layout = QVBoxLayout(chrome)
+        chrome_layout.setContentsMargins(0, 0, 0, 0)
+        chrome_layout.setSpacing(0)
+        self.title_bar = _TitleBar(self)
+        chrome_layout.addWidget(self.title_bar)
+        self._notes_menu_bar = QMenuBar(chrome)
+        chrome_layout.addWidget(self._notes_menu_bar)
+        self.setMenuWidget(chrome)
         notes_menu = self.menuBar().addMenu("&Notes")
         strategy_menu = notes_menu.addMenu("&Animation")
         strategy_group = QActionGroup(self)
@@ -402,6 +479,7 @@ class NotesWindow(QMainWindow):
         self.delete_entry_btn = QPushButton("De&lete entry")
         self.delete_entry_btn.clicked.connect(self._delete_entry)
         buttons.addWidget(self.delete_entry_btn)
+        buttons.addWidget(QSizeGrip(self))
         layout.addLayout(buttons)
 
         QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
@@ -431,6 +509,9 @@ class NotesWindow(QMainWindow):
             self.search_edit.selectAll()
 
     # --- data helpers -----------------------------------------------------
+
+    def menuBar(self):
+        return self._notes_menu_bar
 
     def _shortcut_topics(self):
         """App shortcut profiles exposed as read-only topics."""

@@ -349,3 +349,22 @@ def test_slide_surface_bypasses_window_manager_and_cleans_up(qtbot, temp_data_di
     assert window.parentWidget() is None
     assert not window.windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
     assert window.search_edit.text() == "live input"
+
+
+def test_title_bar_stays_visible_across_slide_handoff(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy('slide')
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window = _make_window(qtbot)
+    window.show()
+    title_bar = window.title_bar
+    assert title_bar.isVisible()
+    assert window._normal_window_flags & Qt.WindowType.FramelessWindowHint
+    window._fade_in.setCurrentTime(1000)
+    qtbot.waitUntil(lambda: window._slide_surface is None)
+    assert window.title_bar is title_bar
+    assert title_bar.isVisible()
+    assert window.windowFlags() & Qt.WindowType.FramelessWindowHint
+    title_bar._toggle_maximized()
+    assert window.isMaximized()
+    title_bar._toggle_maximized()
+    assert not window.isMaximized()
