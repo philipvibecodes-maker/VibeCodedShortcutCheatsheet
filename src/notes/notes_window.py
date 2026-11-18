@@ -45,6 +45,7 @@ from src.data_storage import (
     get_notes_animation_startup_speed,
     get_notes_backdrop_opacity,
     get_notes_backdrop_style,
+    get_notes_backdrop_fade_duration_ms,
     get_notes_font_size,
     get_notes_last_search,
     get_notes_last_topic,
@@ -54,6 +55,7 @@ from src.data_storage import (
     save_notes_animation_startup_speed,
     save_notes_backdrop_opacity,
     save_notes_backdrop_style,
+    save_notes_backdrop_fade_duration_ms,
     save_notes_font_size,
     save_notes_last_search,
     save_notes_last_topic,
@@ -380,6 +382,14 @@ class NotesWindow(QMainWindow):
         self._backdrop = None
         self._backdrop_exclusion = None
         self._opening_progress = 1.0
+        self._backdrop_progress = 0.0
+        self._backdrop_fade = QTimeLine(320, self)
+        self._backdrop_fade.setEasingCurve(QEasingCurve.Type.Linear)
+        self._backdrop_fade.valueChanged.connect(self._animate_backdrop)
+        self._backdrop_start = QTimer(self)
+        self._backdrop_start.setSingleShot(True)
+        self._backdrop_start.setInterval(75)
+        self._backdrop_start.timeout.connect(self._start_backdrop_fade)
         self.installEventFilter(self)
         self._slide_handoff = False
         self._slide_target = None
@@ -472,6 +482,20 @@ class NotesWindow(QMainWindow):
         self.backdrop_label.setBuddy(self.backdrop_slider)
         self.backdrop_label.setText(f"Background &opacity: {self.backdrop_slider.value()}%")
         fade_layout.addWidget(self.backdrop_slider)
+        self.backdrop_fade_label = QLabel()
+        fade_layout.addWidget(self.backdrop_fade_label)
+        self.backdrop_fade_slider = _DurationSlider(Qt.Orientation.Horizontal)
+        self.backdrop_fade_slider.setRange(0, 1000)
+        self.backdrop_fade_slider.setSingleStep(20)
+        self.backdrop_fade_slider.setPageStep(100)
+        self.backdrop_fade_slider.setTracking(False)
+        self.backdrop_fade_slider.setAccessibleName("Background fade time")
+        self.backdrop_fade_slider.setToolTip("Independent of window motion; applies next opening. 0 disables the background fade.")
+        self.backdrop_fade_slider.setValue(get_notes_backdrop_fade_duration_ms())
+        self.backdrop_fade_label.setBuddy(self.backdrop_fade_slider)
+        self.backdrop_fade_label.setText(f"Background fade &time: {self.backdrop_fade_slider.value()} ms")
+        self.backdrop_fade_slider.valueChanged.connect(self._save_backdrop_fade_duration)
+        fade_layout.addWidget(self.backdrop_fade_slider)
         fade_action = QWidgetAction(notes_menu)
         fade_action.setDefaultWidget(fade_controls)
         notes_menu.addAction(fade_action)
@@ -851,6 +875,34 @@ class NotesWindow(QMainWindow):
             self._update_backdrop()
             self._backdrop.show()
             self.raise_()
+            self._queue_backdrop_fade()
+        self._update_backdrop()
+
+    def _save_backdrop_fade_duration(self, duration):
+        save_notes_backdrop_fade_duration_ms(duration)
+        self.backdrop_fade_label.setText(f"Background fade &time: {duration} ms")
+
+    def _queue_backdrop_fade(self):
+        if self._backdrop is not None:
+            self._backdrop_progress = 0.0
+            self._update_backdrop()
+            self._backdrop_start.start()
+
+    def _start_backdrop_fade(self):
+        if self._backdrop is None or not self.isVisible():
+            return
+        self._update_backdrop_mask()
+        self._backdrop.prepareAfterFocus(self._backdrop_exclusion)
+        duration = get_notes_backdrop_fade_duration_ms()
+        if duration:
+            self._backdrop_fade.setDuration(duration)
+            self._backdrop_fade.setUpdateInterval(self._fade_in.updateInterval())
+            self._backdrop_fade.start()
+        else:
+            self._animate_backdrop(1.0)
+
+    def _animate_backdrop(self, progress):
+        self._backdrop_progress = progress
         self._update_backdrop()
 
     def _create_backdrop(self):
@@ -861,7 +913,7 @@ class NotesWindow(QMainWindow):
     def _update_backdrop(self):
         if self._backdrop is not None:
             self._update_backdrop_mask()
-            self._backdrop.setStrength(self._opening_progress * self.backdrop_slider.value() / 100)
+            self._backdrop.setStrength(self._backdrop_progress * self.backdrop_slider.value() / 100)
 
     def _update_backdrop_mask(self):
         if self._backdrop is not None:
@@ -873,6 +925,9 @@ class NotesWindow(QMainWindow):
                 self._backdrop.setMask(QRegion(self._backdrop.rect()).subtracted(QRegion(exclusion)))
 
     def _remove_backdrop(self):
+        self._backdrop_start.stop()
+        self._backdrop_fade.stop()
+        self._backdrop_progress = 0.0
         if self._backdrop is not None:
             self._backdrop.hide()
             self._backdrop.deleteLater()
@@ -890,6 +945,12 @@ class NotesWindow(QMainWindow):
                 self.backdrop_style_combo.findData(get_notes_backdrop_style()))
             self.backdrop_style_combo.blockSignals(False)
             self._opening_progress = 0.0 if get_notes_fade_in_duration_ms() else 1.0
+            self._backdrop_progress = 0.0
+            fade_duration = get_notes_backdrop_fade_duration_ms()
+            self.backdrop_fade_slider.blockSignals(True)
+            self.backdrop_fade_slider.setValue(fade_duration)
+            self.backdrop_fade_slider.blockSignals(False)
+            self.backdrop_fade_label.setText(f"Background fade &time: {fade_duration} ms")
             self._create_backdrop()
             self._update_backdrop()
         if (get_notes_animation_strategy() in ("slide", "palette")
@@ -918,6 +979,7 @@ class NotesWindow(QMainWindow):
             surface.activateWindow()
             self.search_edit.setFocus()
             self._fade_in.start()
+            self._queue_backdrop_fade()
         else:
             super().show()
 
@@ -930,6 +992,7 @@ class NotesWindow(QMainWindow):
         self.search_edit.setFocus()
         if duration:
             self._fade_in.start()
+        self._queue_backdrop_fade()
 
     def _prepare_opening(self):
         self._fade_in.stop()

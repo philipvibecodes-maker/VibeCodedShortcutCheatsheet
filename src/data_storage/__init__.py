@@ -188,6 +188,15 @@ def save_notes_backdrop_style(style: str) -> None:
     _save_config_value("notes_backdrop_style", style)
 
 
+def get_notes_backdrop_fade_duration_ms() -> int:
+    duration = _get_config().get("notes_backdrop_fade_duration_ms", 320)
+    return duration if type(duration) is int and 0 <= duration <= 1000 else 320
+
+
+def save_notes_backdrop_fade_duration_ms(duration: int) -> None:
+    _save_config_value("notes_backdrop_fade_duration_ms", duration)
+
+
 def get_notes_last_topic() -> Optional[str]:
     """Get the topic the notes window last showed, or None if never set."""
     return _get_config().get("notes_last_topic")

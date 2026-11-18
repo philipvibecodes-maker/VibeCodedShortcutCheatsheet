@@ -379,7 +379,7 @@ def test_title_bar_stays_visible_across_slide_handoff(qtbot, temp_data_dir):
 
 
 @pytest.mark.parametrize('strategy', ['fade', 'slide'])
-def test_backdrop_follows_animation_and_live_opacity(qtbot, temp_data_dir, strategy):
+def test_backdrop_fades_independently_of_motion_and_live_opacity(qtbot, temp_data_dir, strategy):
     data_storage.save_notes_animation_strategy(strategy)
     data_storage.save_notes_fade_in_duration_ms(1000)
     window = _make_window(qtbot)
@@ -389,12 +389,17 @@ def test_backdrop_follows_animation_and_live_opacity(qtbot, temp_data_dir, strat
     assert backdrop.isVisible()
     assert backdrop.strength == 0
     window._fade_in.setCurrentTime(500)
-    assert backdrop.strength == pytest.approx(0.875 * 0.6)
+    assert backdrop.strength == 0  # Focus colors change before the scrim fades.
+    qtbot.waitUntil(lambda: window._backdrop_fade.state() == QTimeLine.State.Running)
+    window._backdrop_fade.setCurrentTime(160)
+    assert backdrop.strength == pytest.approx(0.5 * 0.6)
     window.backdrop_slider.setValue(80)
     assert data_storage.get_notes_backdrop_opacity() == 80
-    assert backdrop.strength == pytest.approx(0.875 * 0.8)
+    assert backdrop.strength == pytest.approx(0.5 * 0.8)
     window._fade_in.setCurrentTime(1000)
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert backdrop.strength < 0.8  # Completing motion must not snap the background.
+    window._backdrop_fade.setCurrentTime(320)
     assert backdrop.strength == pytest.approx(0.8)
     window.close()
     assert window._backdrop is None
@@ -530,3 +535,46 @@ def test_background_style_persists_and_applies_next_opening(qtbot, temp_data_dir
 def test_background_style_validation(temp_data_dir, value, expected):
     data_storage.save_notes_backdrop_style(value)
     assert data_storage.get_notes_backdrop_style() == expected
+
+
+@pytest.mark.parametrize('running', [False, True])
+def test_background_focus_delay_and_fade_cancel_on_close(qtbot, temp_data_dir, running):
+    window = _make_window(qtbot)
+    window.show()
+    assert window._backdrop_start.isActive()
+    assert window._backdrop.strength == 0
+    if running:
+        qtbot.waitUntil(lambda: window._backdrop_fade.state() == QTimeLine.State.Running)
+    window.close()
+    qtbot.wait(100)
+    assert not window._backdrop_start.isActive()
+    assert window._backdrop_fade.state() == QTimeLine.State.NotRunning
+    assert window._backdrop is None
+
+
+def test_background_fade_setting_is_saved_and_independent(qtbot, temp_data_dir):
+    data_storage.save_notes_fade_in_duration_ms(0)
+    window = _make_window(qtbot)
+    window.backdrop_fade_slider.setValue(640)
+    assert data_storage.get_notes_backdrop_fade_duration_ms() == 640
+    window.show()
+    assert window._fade_in.state() == QTimeLine.State.NotRunning
+    qtbot.waitUntil(lambda: window._backdrop_fade.state() == QTimeLine.State.Running)
+    assert window._backdrop_fade.duration() == 640
+    window._backdrop_fade.setCurrentTime(320)
+    assert window._backdrop.strength == pytest.approx(0.3)
+
+
+@pytest.mark.parametrize('value, expected', [(None, 320), (True, 320), (-1, 320),
+                                           (1001, 320), (0, 0), (640, 640)])
+def test_background_fade_duration_validation(temp_data_dir, value, expected):
+    data_storage.save_notes_backdrop_fade_duration_ms(value)
+    assert data_storage.get_notes_backdrop_fade_duration_ms() == expected
+
+
+def test_background_fade_can_be_disabled(qtbot, temp_data_dir):
+    data_storage.save_notes_backdrop_fade_duration_ms(0)
+    window = _make_window(qtbot)
+    window.show()
+    qtbot.waitUntil(lambda: window._backdrop.strength == pytest.approx(0.6))
+    assert window._backdrop_fade.state() == QTimeLine.State.NotRunning

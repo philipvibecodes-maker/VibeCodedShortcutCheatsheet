@@ -94,12 +94,13 @@ def test_backdrop_paints_cached_image_with_requested_alpha(qtbot):
 
     screen = Screen()
     backdrop = NotesBackdrop(screen, lambda: None, "blur")
+    backdrop.prepareAfterFocus(QRect(20, 20, 40, 40))
     qtbot.addWidget(backdrop)
     for strength in (0.0, 0.5, 1.0):
         backdrop.setStrength(strength)
         pixel = backdrop.grab().toImage().pixelColor(64, 64)
         assert abs(pixel.alpha() - round(255 * strength)) <= 1
-    assert screen.calls == 1
+    assert screen.calls == 2
     assert backdrop.graphicsEffect() is None
 
 
@@ -129,3 +130,43 @@ def test_dark_backgrounds_need_no_capture_and_have_correct_opacity(qtbot, style)
         assert 60 < center.alpha() < edge.alpha() <= 153
     backdrop.setStrength(0)
     assert backdrop.grab().toImage().pixelColor(0, 0).alpha() == 0
+
+
+def test_blur_refreshes_focus_colors_without_capturing_notes(qtbot):
+    from PyQt6.QtCore import QRect
+    from PyQt6.QtGui import QPainter
+    from src.notes.backdrop import NotesBackdrop
+    active = QColor('#335d8e')
+    inactive = QColor('#233340')
+
+    class Screen:
+        calls = 0
+
+        def geometry(self):
+            return QRect(0, 0, 400, 400)
+
+        def grabWindow(self, window):
+            self.calls += 1
+            image = QPixmap(800, 800)
+            image.fill(active if self.calls == 1 else inactive)
+            if self.calls == 2:
+                painter = QPainter(image)
+                painter.fillRect(QRect(200, 200, 200, 200), QColor('red'))
+                painter.end()
+            image.setDevicePixelRatio(2)
+            return image
+
+    screen = Screen()
+    backdrop = NotesBackdrop(screen, lambda: None, 'blur')
+    qtbot.addWidget(backdrop)
+    assert screen.calls == 1
+    backdrop.prepareAfterFocus(QRect(100, 100, 100, 100))
+    result = backdrop._image.toImage()
+    outside = result.pixelColor(20, 20)
+    protected = result.pixelColor(150, 150)
+    assert abs(outside.blue() - inactive.blue()) <= 3
+    assert abs(protected.blue() - active.blue()) <= 3
+    assert protected.red() < 70  # The foreground's red pixels were scrubbed.
+    assert backdrop._clean_capture is None
+    backdrop.prepareAfterFocus(QRect(100, 100, 100, 100))
+    assert screen.calls == 2

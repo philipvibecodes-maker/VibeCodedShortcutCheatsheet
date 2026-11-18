@@ -1,3 +1,3 @@
 """Visible update identifier; increment for each delivered code change."""
 
-APP_REVISION = 11
+APP_REVISION = 12

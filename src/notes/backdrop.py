@@ -6,7 +6,10 @@ from PyQt6.QtWidgets import QGraphicsBlurEffect, QGraphicsScene, QWidget
 
 
 def blurred_desktop(screen):
-    capture = screen.grabWindow(0)
+    return blur_capture(screen.grabWindow(0))
+
+
+def blur_capture(capture):
     if capture.isNull():
         # Some compositors do not expose the desktop through XWayland.
         capture = QPixmap(1, 1)
@@ -58,11 +61,11 @@ class NotesBackdrop(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setGeometry(screen.geometry())
         self.style = style
+        self._screen = screen
         self._image = None
+        self._clean_capture = None
         if style == "blur":
-            self._image = blurred_desktop(screen).scaled(
-                screen.geometry().size(), Qt.AspectRatioMode.IgnoreAspectRatio,
-                Qt.TransformationMode.SmoothTransformation)
+            self._clean_capture = screen.grabWindow(0)
         self._spotlight = QRadialGradient(
             self.rect().center().toPointF(), max(self.width(), self.height()) * 0.65)
         self._spotlight.setColorAt(0.0, QColor(9, 12, 18, 120))
@@ -77,6 +80,30 @@ class NotesBackdrop(QWidget):
             painter.end()
         self.strength = 0.0
         self._close_notes = close_notes
+
+    def prepareAfterFocus(self, exclusion):
+        """Refresh inactive desktop chrome without capturing notes into blur."""
+        if self.style != "blur" or self._clean_capture is None:
+            return
+        capture = self._screen.grabWindow(0)
+        clean = self._clean_capture
+        if capture.isNull() or capture.size() != clean.size():
+            capture = clean
+        elif not clean.isNull():
+            capture.setDevicePixelRatio(1)
+            clean.setDevicePixelRatio(1)
+            exclusion = exclusion.adjusted(-32, -32, 32, 32)
+            scale_x = capture.width() / self.width()
+            scale_y = capture.height() / self.height()
+            rect = QRect(round(exclusion.x() * scale_x), round(exclusion.y() * scale_y),
+                         round(exclusion.width() * scale_x), round(exclusion.height() * scale_y))
+            painter = QPainter(capture)
+            painter.drawPixmap(rect, clean, rect)
+            painter.end()
+        self._image = blur_capture(capture).scaled(
+            self.size(), Qt.AspectRatioMode.IgnoreAspectRatio,
+            Qt.TransformationMode.SmoothTransformation)
+        self._clean_capture = None
 
     def setStrength(self, strength):
         strength = max(0.0, min(1.0, strength))
