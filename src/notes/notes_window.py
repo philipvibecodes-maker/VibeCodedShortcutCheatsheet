@@ -176,31 +176,49 @@ class _TitleBar(QWidget):
             layout.addWidget(button)
 
     def _minimize(self):
-        if self.notes._slide_surface is not None:
+        if self.notes._fade_in.state() == QTimeLine.State.Running:
             self.notes._fade_in.stop()
             self.notes._finish_opening()
-        self.notes.showMinimized()
+        if self.notes._slide_surface is not None:
+            # Override-redirect surfaces do not have a WM minimize action.
+            self.notes.hide()
+        else:
+            self.notes.showMinimized()
 
     def _toggle_maximized(self):
-        if self.notes._slide_surface is not None:
+        if self.notes._fade_in.state() == QTimeLine.State.Running:
             self.notes._fade_in.stop()
             self.notes._finish_opening()
-        if self.notes.isMaximized():
+        surface = self.notes._slide_surface
+        if surface is not None:
+            previous = getattr(self, "_restore_geometry", None)
+            if previous is None:
+                self._restore_geometry = surface.geometry()
+                surface.setGeometry(surface.screen().availableGeometry())
+            else:
+                surface.setGeometry(previous)
+                self._restore_geometry = None
+        elif self.notes.isMaximized():
             self.notes.showNormal()
         else:
             self.notes.showMaximized()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            if self.notes._slide_surface is not None:
+            if self.notes._fade_in.state() == QTimeLine.State.Running:
                 self.notes._fade_in.stop()
                 self.notes._finish_opening()
-            handle = self.window().windowHandle()
-            if handle is not None:
-                handle.startSystemMove()
-                event.accept()
-                return
-        super().mousePressEvent(event)
+            self._drag_offset = event.globalPosition().toPoint() - self.window().pos()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.MouseButton.LeftButton and hasattr(self, "_drag_offset"):
+            self.window().move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+        else:
+            super().mouseMoveEvent(event)
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -777,6 +795,12 @@ class NotesWindow(QMainWindow):
         self.fade_duration_slider.blockSignals(False)
         self._update_fade_label(duration)
 
+    def raise_(self):
+        if self._slide_surface is not None:
+            self._slide_surface.raise_()
+        else:
+            super().raise_()
+
     def show(self):
         if (get_notes_animation_strategy() == "slide"
                 and get_notes_fade_in_duration_ms() and not self.isVisible()):
@@ -790,9 +814,13 @@ class NotesWindow(QMainWindow):
             surface.resize(self.size())
             surface.move(self._slide_target.x(), self._slide_start_y)
             self._slide_surface = surface
+            self.title_bar._restore_geometry = None
             self._normal_window_flags = self.windowFlags()
             self.setParent(surface, Qt.WindowType.Widget)
             self.move(0, 0)
+            surface_layout = QVBoxLayout(surface)
+            surface_layout.setContentsMargins(0, 0, 0, 0)
+            surface_layout.addWidget(self)
             super().show()
             surface.show()
             surface.activateWindow()
@@ -855,6 +883,12 @@ class NotesWindow(QMainWindow):
             self._fade_overlay.setProgress(progress)
 
     def _finish_opening(self, show_destination=True):
+        if self._slide_surface is not None and show_destination:
+            # Keep the exact native surface: reparenting/remapping here causes
+            # a compositor flash and changes the shadow at the end of the slide.
+            self._slide_surface.move(self._slide_target)
+            self._fade_overlay.hide()
+            return
         if self._slide_surface is not None:
             surface = self._slide_surface
             self._slide_handoff = True

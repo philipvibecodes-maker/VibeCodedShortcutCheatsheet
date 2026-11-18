@@ -288,7 +288,7 @@ def test_slide_strategy_moves_down_and_persists(qtbot, temp_data_dir):
     assert window._slide_surface.y() == round(window._slide_start_y + (target.y() - window._slide_start_y) * 0.875)
     window._fade_in.setCurrentTime(1000)
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
-    assert window.pos() == target
+    assert window._slide_surface.pos() == target
     window.close()
     restored = _make_window(qtbot)
     assert restored.animation_actions['slide'].isChecked()
@@ -344,10 +344,10 @@ def test_slide_surface_bypasses_window_manager_and_cleans_up(qtbot, temp_data_di
     assert not surface.isVisible()
     window.show()
     window._fade_in.setCurrentTime(1000)
-    qtbot.waitUntil(lambda: window._slide_surface is None)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
     assert window.isVisible()
-    assert window.parentWidget() is None
-    assert not window.windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
+    assert window.parentWidget() is window._slide_surface
+    assert window._slide_surface.windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
     assert window.search_edit.text() == "live input"
 
 
@@ -357,14 +357,22 @@ def test_title_bar_stays_visible_across_slide_handoff(qtbot, temp_data_dir):
     window = _make_window(qtbot)
     window.show()
     title_bar = window.title_bar
+    initial_surface = window._slide_surface
+    initial_native_id = int(initial_surface.winId())
     assert title_bar.isVisible()
     assert window._normal_window_flags & Qt.WindowType.FramelessWindowHint
     window._fade_in.setCurrentTime(1000)
-    qtbot.waitUntil(lambda: window._slide_surface is None)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
     assert window.title_bar is title_bar
+    assert window._slide_surface is initial_surface
+    assert int(window._slide_surface.winId()) == initial_native_id
     assert title_bar.isVisible()
-    assert window.windowFlags() & Qt.WindowType.FramelessWindowHint
+    assert window._slide_surface.windowFlags() & Qt.WindowType.FramelessWindowHint
+    surface = window._slide_surface
+    original_geometry = surface.geometry()
+    native_id = int(surface.winId())
     title_bar._toggle_maximized()
-    assert window.isMaximized()
+    assert surface.geometry() == surface.screen().availableGeometry()
     title_bar._toggle_maximized()
-    assert not window.isMaximized()
+    assert surface.geometry() == original_geometry
+    assert int(surface.winId()) == native_id

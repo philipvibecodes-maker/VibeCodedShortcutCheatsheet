@@ -135,4 +135,6 @@ Choose **Notes → Animation → Fade reveal** or **Slide from top** in the note
 
 The Notes menu also has a **Startup speed** control (1–6, default 3). Higher values make either animation progress faster at the start and settle more slowly, while keeping the selected total duration. The setting saves automatically and applies on the next opening. The duration slider ignores arrow keys; drag it with the mouse or use Home/End and Page Up/Page Down.
 
-Starting with revision 2, Slide from top uses a temporary frameless host that bypasses GNOME's window-placement handling. The live notes content slides down from outside the screen. Revision 3 adds a persistent in-app title bar that slides with the content and remains after landing, avoiding a native title-bar pop-in. Drag it to move, double-click to maximize/restore, or use its minimize, maximize, and close buttons. Resize with the bottom-right grip.
+Starting with revision 2, Slide from top uses a frameless host that bypasses GNOME's window-placement handling. The live notes content slides down from outside the screen. Revision 3 adds a persistent in-app title bar that slides with the content and remains after landing, avoiding a native title-bar pop-in. Drag it to move, double-click to maximize/restore, or use its minimize, maximize, and close buttons. Resize with the bottom-right grip.
+
+Revision 4 keeps that same host after the slide completes, avoiding a window remap and shadow change at the end. In slide mode, Minimize hides notes; use the notes hotkey to reopen them.
