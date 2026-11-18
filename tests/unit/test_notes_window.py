@@ -578,3 +578,97 @@ def test_background_fade_can_be_disabled(qtbot, temp_data_dir):
     window.show()
     qtbot.waitUntil(lambda: window._backdrop.strength == pytest.approx(0.6))
     assert window._backdrop_fade.state() == QTimeLine.State.NotRunning
+
+
+@pytest.mark.parametrize('strategy', ['fade', 'slide', 'palette'])
+def test_alt_t_dialog_is_modal_above_notes_and_accepts_input(qtbot, temp_data_dir, strategy):
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QApplication, QInputDialog, QLineEdit
+    data_storage.save_notes_animation_strategy(strategy)
+    window = _make_window(qtbot)
+    window.show()
+    window.window().activateWindow()
+    qtbot.wait(20)
+    inspected = []
+
+    def fill_dialog():
+        dialog = QApplication.activeModalWidget()
+        try:
+            assert isinstance(dialog, QInputDialog)
+            inspected.append(dialog)
+            assert dialog.windowFlags() & Qt.WindowType.WindowStaysOnTopHint
+            assert dialog.windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
+            assert dialog.findChild(QLineEdit).hasFocus()
+            expected = window.mapToGlobal(window.rect().center())
+            assert (dialog.frameGeometry().center() - expected).manhattanLength() <= 2
+            dialog.setTextValue('new topic from mnemonic')
+            dialog.accept()
+        finally:
+            if dialog is not None and dialog.isVisible():
+                dialog.reject()
+
+    QTimer.singleShot(250, fill_dialog)
+    qtbot.keyClick(window, Qt.Key.Key_T, Qt.KeyboardModifier.AltModifier)
+    qtbot.waitUntil(lambda: bool(inspected))
+    assert 'new topic from mnemonic' in data_storage.get_topics()
+    assert window.isVisible()
+
+
+def test_cancel_new_topic_leaves_data_unchanged(qtbot, temp_data_dir):
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QApplication
+    data_storage.add_topic('existing')
+    window = _make_window(qtbot)
+    window.show()
+    QTimer.singleShot(50, lambda: QApplication.activeModalWidget().reject())
+    window._new_topic()
+    assert list(data_storage.get_topics()) == ['existing']
+    assert window.isVisible()
+
+
+def test_entry_dialog_uses_foreground_modal_path(qtbot, temp_data_dir):
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QApplication
+    from src.notes.notes_window import EntryDialog
+    data_storage.add_topic('sample')
+    data_storage.save_notes_animation_strategy('palette')
+    window = _make_window(qtbot)
+    window.show()
+
+    def save_entry():
+        dialog = QApplication.activeModalWidget()
+        try:
+            assert isinstance(dialog, EntryDialog)
+            assert dialog.windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
+            dialog.key_edit.setText('key')
+            dialog.value_edit.setPlainText('value')
+            dialog.accept()
+        finally:
+            if dialog is not None and dialog.isVisible():
+                dialog.reject()
+
+    QTimer.singleShot(50, save_entry)
+    window._new_entry()
+    assert data_storage.get_topics()['sample'] == [{'key': 'key', 'value': 'value'}]
+
+
+def test_delete_confirmation_can_cancel_in_foreground(qtbot, temp_data_dir):
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QApplication, QMessageBox
+    data_storage.add_topic('keep')
+    window = _make_window(qtbot)
+    window.show()
+
+    def cancel_delete():
+        dialog = QApplication.activeModalWidget()
+        try:
+            assert isinstance(dialog, QMessageBox)
+            assert dialog.windowFlags() & Qt.WindowType.WindowStaysOnTopHint
+            dialog.done(int(QMessageBox.StandardButton.No))
+        finally:
+            if dialog is not None and dialog.isVisible():
+                dialog.reject()
+
+    QTimer.singleShot(50, cancel_delete)
+    window._delete_topic()
+    assert 'keep' in data_storage.get_topics()

@@ -23,6 +23,7 @@ parser.add_argument('--duration', type=int, default=360)
 parser.add_argument('--strategy', choices=['fade', 'slide', 'palette'], default='slide')
 parser.add_argument('--background', choices=['dim', 'spotlight', 'blur'], default='dim')
 parser.add_argument('--focus-chrome', action='store_true', help='Show a background title-color focus indicator')
+parser.add_argument('--topic-dialog', action='store_true', help='Open New topic using Alt+T')
 parser.add_argument('--menu', action='store_true', help='Show Notes controls in the recording')
 parser.add_argument('--theme', choices=['dark', 'light'], default='dark')
 parser.add_argument('--opacity', type=int, default=58)
@@ -117,6 +118,10 @@ def open_notes():
     global opening_started
     opening_started = time.perf_counter()
     window.show()
+    if args.topic_dialog:
+        from PyQt6.QtTest import QTest
+        QTimer.singleShot(500, lambda: QTest.keyClick(
+            window, Qt.Key.Key_T, Qt.KeyboardModifier.AltModifier))
     if args.menu:
         menu = window.menuBar().actions()[0].menu()
         QTimer.singleShot(500, lambda: menu.popup(
@@ -124,6 +129,8 @@ def open_notes():
     QTimer.singleShot(1600, finish)
 
 def finish():
+    if args.topic_dialog and app.activeModalWidget() is not None:
+        app.activeModalWidget().reject()
     window.close()
     recorder.communicate(b'q', timeout=10)
     (args.output / 'timing.json').write_text(json.dumps({

@@ -712,18 +712,52 @@ class NotesWindow(QMainWindow):
 
     # --- actions ----------------------------------------------------------
 
+    def _exec_dialog(self, dialog):
+        """Keep modal dialogs above the unmanaged notes host and backdrop."""
+        if isinstance(dialog, QMessageBox):
+            dialog.setOption(QMessageBox.Option.DontUseNativeDialog, True)
+        if self._fade_in.state() == QTimeLine.State.Running:
+            self._fade_in.stop()
+            self._finish_opening()
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        dialog.setWindowFlags(dialog.windowFlags()
+                              | Qt.WindowType.WindowStaysOnTopHint
+                              | Qt.WindowType.X11BypassWindowManagerHint)
+        dialog.adjustSize()
+        center = self.mapToGlobal(self.rect().center())
+        dialog.move(center.x() - dialog.width() // 2,
+                    center.y() - dialog.height() // 2)
+        dialog.show()
+        dialog.move(dialog.pos() + center - dialog.frameGeometry().center())
+        dialog.raise_()
+        dialog.activateWindow()
+        result = dialog.exec()
+        if self.isVisible():
+            self.raise_()
+            self.window().activateWindow()
+        return result
+
     def _new_topic(self):
-        name, ok = QInputDialog.getText(self, "New topic", "Topic name:")
-        if ok and add_topic(name):
+        dialog = QInputDialog(self)
+        dialog.setWindowTitle("New topic")
+        dialog.setLabelText("Topic name:")
+        accepted = self._exec_dialog(dialog) == QDialog.DialogCode.Accepted
+        name = dialog.textValue()
+        dialog.deleteLater()
+        if accepted and add_topic(name):
             self._refresh_topics(select=name.strip())
 
     def _delete_topic(self):
         topic = self._current_topic()
         if not topic or self._is_readonly_topic(topic):
             return
-        answer = QMessageBox.question(
-            self, "Delete topic", f"Delete topic '{topic}' and all its entries?"
-        )
+        dialog = QMessageBox(QMessageBox.Icon.Question, "Delete topic",
+                             f"Delete topic '{topic}' and all its entries?",
+                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                             self)
+        dialog.setDefaultButton(QMessageBox.StandardButton.No)
+        answer = self._exec_dialog(dialog)
+        dialog.deleteLater()
         if answer == QMessageBox.StandardButton.Yes:
             delete_topic(topic)
             self._refresh_topics()
@@ -733,11 +767,12 @@ class NotesWindow(QMainWindow):
         if not topic or self._is_readonly_topic(topic):
             return
         dialog = EntryDialog(self, title=f"New entry — {topic}")
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+        if self._exec_dialog(dialog) == QDialog.DialogCode.Accepted:
             key, value = dialog.result()
             if add_topic_entry(topic, key, value):
                 self._refresh_topics(select=topic)
                 self.table.setCurrentCell(self.table.rowCount() - 1, 0)
+        dialog.deleteLater()
 
     def _selected_entry(self):
         row = self.table.currentRow()

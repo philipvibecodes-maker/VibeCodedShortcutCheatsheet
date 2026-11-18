@@ -153,3 +153,5 @@ Revision 10 refines Command palette: a shorter 12px entrance, readable content i
 Revision 11 adds alternative background treatments and makes the dark translucent scrim the default. Your saved opacity is preserved. [Compare the styles and GNOME recordings](docs/animation-review/revision-11/README.md).
 
 Revision 12 separates background fading from the window entrance and desktop focus-color change. **Background fade time** in the Notes menu defaults to 320 ms (0–1000 ms; 0 disables it), starting after a 75 ms focus-settling interval. This setting is independent of window animation duration and startup speed. Blur refreshes the desktop after focus changes, removing notes and their shadow from the new capture. [Focus-change recordings and screenshots](docs/animation-review/revision-12/README.md).
+
+Revision 13 fixes notes dialogs opening behind the animated window: Alt+T/New topic, New entry, and Delete topic confirmation now use the notes host's foreground stacking layer, center over notes, and restore focus afterwards.
