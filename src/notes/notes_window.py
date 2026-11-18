@@ -802,12 +802,8 @@ class NotesWindow(QMainWindow):
         previous = self._selected_identity()
         self.table.blockSignals(True)
         self.table.setRowCount(0)
-        if searching:
-            self.table.setColumnCount(3)
-            self.table.setHorizontalHeaderLabels(["Topic", "Key", "Value"])
-        else:
-            self.table.setColumnCount(2)
-            self.table.setHorizontalHeaderLabels(["Key", "Value"])
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Topic", "Key", "Value"])
 
         rows = []  # (topic, index_or_None, key, value)
         all_topics = self._all_topics()
@@ -826,32 +822,25 @@ class NotesWindow(QMainWindow):
         for row, (topic, index, key, value) in enumerate(rows):
             self.table.insertRow(row)
             # Keep full values, including trailing newlines, for display and editing.
-            cells = [topic, key, value] if searching else [key, value]
+            cells = [topic, key, value]
             editable = not self._is_readonly_topic(topic)
             for col, text in enumerate(cells):
                 item = QTableWidgetItem(text)
                 item.setTextAlignment(cell_align)
                 if col == 0:
                     item.setData(Qt.ItemDataRole.UserRole, (topic, index))
-                if not editable or (searching and col == 0):
+                if not editable or col == 0:
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, col, item)
         self._populating = False
 
         header = self.table.horizontalHeader()
-        if searching:
-            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        else:
-            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-
-        # multi-line editor on the value column (plain default elsewhere)
-        value_col = 2 if searching else 1
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.table.setItemDelegateForColumn(0, self._key_delegate)
-        self.table.setItemDelegateForColumn(1, self._multiline_delegate if not searching else self._key_delegate)
-        self.table.setItemDelegateForColumn(value_col, self._multiline_delegate)
+        self.table.setItemDelegateForColumn(1, self._key_delegate)
+        self.table.setItemDelegateForColumn(2, self._multiline_delegate)
 
         self.table.resizeRowsToContents()
 
@@ -963,8 +952,7 @@ class NotesWindow(QMainWindow):
         if topic is None:
             return
         # Edit the focused cell; the topic context column is read-only.
-        key_col = 1 if self.table.columnCount() == 3 else 0
-        col = max(key_col, self.table.currentColumn())
+        col = max(1, self.table.currentColumn())
         self.table.setFocus()
         self.table.edit(self.table.model().index(self.table.currentRow(), col))
 
@@ -978,12 +966,8 @@ class NotesWindow(QMainWindow):
         topic, index = data_item.data(Qt.ItemDataRole.UserRole)
         if self._is_readonly_topic(topic):
             return
-        if self.table.columnCount() == 3:
-            key = self.table.item(item.row(), 1).text()
-            value = self.table.item(item.row(), 2).text()
-        else:
-            key = self.table.item(item.row(), 0).text()
-            value = self.table.item(item.row(), 1).text()
+        key = self.table.item(item.row(), 1).text()
+        value = self.table.item(item.row(), 2).text()
         update_topic_entry(topic, index, key, value)
         self.table.resizeRowToContents(item.row())
         self._update_selection_actions()

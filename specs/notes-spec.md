@@ -83,3 +83,10 @@ The application has a notes window, separate from the cheatsheet window, that wi
   editing. Enter in search focuses the table; Enter or double-click in the table edits a cell.
   Show empty-result feedback below the table.
 - Resume live-app screenshot/recording review with disposable sample data.
+
+## Revision 17 — persistent topic column
+
+- Always show Topic / Key / Value columns, including when the search is empty or has no matches.
+  An empty search still shows only the selected topic's entries; nonempty search still spans all
+  topics. Topic cells are always read-only. Keep key/value editing, multiline values and full-value
+  copying aligned to their fixed columns.

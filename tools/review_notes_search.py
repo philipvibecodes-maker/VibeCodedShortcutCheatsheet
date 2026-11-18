@@ -94,18 +94,21 @@ with tempfile.TemporaryDirectory() as temporary:
     window.search_edit.clear()
     window.table.setCurrentCell(0, 0)
     capture('full-multiline-values')
+    assert window.table.columnCount() == 3
+    assert window.table.item(0, 0).text() == 'Git commands'
+    assert not window.table.item(0, 0).flags() & Qt.ItemFlag.ItemIsEditable
     assert not hasattr(window, 'preview')
     assert window.table.wordWrap()
     assert window.table.rowHeight(0) > window.table.rowHeight(1)
     original_value = storage.get_topics()['Git commands'][0]['value']
-    assert window.table.item(0, 1).text() == original_value
-    position = window.table.visualItemRect(window.table.item(0, 0)).center()
+    assert window.table.item(0, 2).text() == original_value
+    position = window.table.visualItemRect(window.table.item(0, 1)).center()
     QTest.mouseClick(window.table.viewport(), Qt.MouseButton.LeftButton, pos=position)
     QTest.mouseDClick(window.table.viewport(), Qt.MouseButton.LeftButton, pos=position)
     assert window._active_editor is not None
     QTest.keyClick(window._active_editor[1], Qt.Key.Key_Escape)
     QTest.qWait(30)
-    window.table.setCurrentCell(0, 1)
+    window.table.setCurrentCell(0, 2)
     window.table.setFocus()
     QTest.keyClick(window.table, Qt.Key.Key_Return)
     assert window._active_editor is not None

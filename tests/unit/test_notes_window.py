@@ -84,9 +84,10 @@ def test_clicking_topic_exits_search(qtbot, temp_data_dir, topic_row):
     assert window.search_edit.text() == ""
     assert data_storage.get_notes_last_search() == ""
     assert window._current_topic() == item.text()
-    assert window.table.columnCount() == 2
+    assert window.table.columnCount() == 3
     assert window.table.rowCount() == 1
-    assert window.table.item(0, 0).text() == item.text() + " key"
+    assert window.table.item(0, 0).text() == item.text()
+    assert window.table.item(0, 1).text() == item.text() + " key"
 
 
 def test_keyboard_topic_selection_exits_search(qtbot, temp_data_dir):

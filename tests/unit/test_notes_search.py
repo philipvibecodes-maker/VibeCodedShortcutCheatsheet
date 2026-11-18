@@ -87,7 +87,7 @@ def test_inline_edit_cancel_validation_commit_and_focus_safety(notes, qtbot):
     qtbot.wait(10)
     assert notes._active_editor is None
     assert storage.get_topics()['alpha'][0]['value'] == 'Updated\nvalue\n'
-    assert notes.table.item(0, 1).text() == 'Updated\nvalue\n'
+    assert notes.table.item(0, 2).text() == 'Updated\nvalue\n'
     assert notes.search_edit.isEnabled()
 
 
@@ -169,7 +169,7 @@ def test_double_click_and_enter_edit_focused_cells(notes, qtbot):
     notes.table.setFocus()
     qtbot.keyClicks(notes.table, 'x')
     assert notes._active_editor is None
-    item = notes.table.item(0, 0)
+    item = notes.table.item(0, 1)
     notes.table.setCurrentItem(item)
     position = notes.table.visualItemRect(item).center()
     qtbot.mouseClick(notes.table.viewport(), Qt.MouseButton.LeftButton, pos=position)
@@ -183,7 +183,7 @@ def test_double_click_and_enter_edit_focused_cells(notes, qtbot):
     assert len(storage.get_topics()['alpha']) == 2
     notes._escape()
     qtbot.wait(10)
-    notes.table.setCurrentCell(0, 1)
+    notes.table.setCurrentCell(0, 2)
     qtbot.keyClick(notes.table, Qt.Key.Key_Return)
     assert isinstance(notes._active_editor[1], QPlainTextEdit)
     notes._escape()
@@ -191,7 +191,7 @@ def test_double_click_and_enter_edit_focused_cells(notes, qtbot):
 
 
 def test_edit_action_uses_current_value_cell(notes):
-    notes.table.setCurrentCell(0, 1)
+    notes.table.setCurrentCell(0, 2)
     notes.edit_entry_btn.click()
     assert isinstance(notes._active_editor[1], QPlainTextEdit)
 
@@ -202,8 +202,8 @@ def test_full_multiline_values_remain_visible_when_resized_or_font_changes(notes
     notes._refresh_entries()
     notes.resize(720, 600)
     qtbot.wait(30)
-    item = notes.table.item(0, 1)
-    delegate = notes.table.itemDelegateForColumn(1)
+    item = notes.table.item(0, 2)
+    delegate = notes.table.itemDelegateForColumn(2)
     assert delegate.displayText(value, notes.locale()).replace('\u2028', '\n') == value
     assert item.text() == value
     assert notes.table.wordWrap()
@@ -212,7 +212,7 @@ def test_full_multiline_values_remain_visible_when_resized_or_font_changes(notes
     notes._change_font_size(2)
     qtbot.wait(30)
     assert notes.table.font().pointSize() == notes._font_size
-    assert notes.table.item(0, 1).text() == value
+    assert notes.table.item(0, 2).text() == value
     assert notes.table.rowHeight(0) >= before
 
 
@@ -229,3 +229,18 @@ def test_palette_close_really_hides_before_reopening(notes, qtbot, duration):
     notes.search_edit.clear()
     qtbot.wait(30)
     assert not notes.isVisible()
+
+
+def test_topic_column_stays_visible_and_readonly_with_or_without_search(notes):
+    for query in ('', 'First', '', 'no match', ''):
+        notes.search_edit.setText(query)
+        assert notes.table.columnCount() == 3
+        assert [notes.table.horizontalHeaderItem(c).text() for c in range(3)] == ['Topic', 'Key', 'Value']
+        assert not notes.table.isColumnHidden(0)
+        for row in range(notes.table.rowCount()):
+            topic_item = notes.table.item(row, 0)
+            topic, index = topic_item.data(Qt.ItemDataRole.UserRole)
+            assert topic_item.text() == topic
+            assert not topic_item.flags() & Qt.ItemFlag.ItemIsEditable
+            assert notes.table.item(row, 1).text() == storage.get_topics()[topic][index]['key']
+            assert notes.table.item(row, 2).text() == storage.get_topics()[topic][index]['value']
