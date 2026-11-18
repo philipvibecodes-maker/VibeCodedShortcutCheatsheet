@@ -31,13 +31,13 @@ def test_layout_toggle_and_persistence(notes, qtbot):
     assert notes.topic_list.isVisible()
     assert not storage.get_notes_always_show_topics()
     notes.search_edit.setText('First')
-    before = notes.preview.toPlainText()
+    before = notes._selected_identity()
     notes.always_topics_action.setChecked(True)
     assert storage.get_notes_always_show_topics()
     assert notes.topic_list.isVisible()
     assert not notes.topics_btn.isVisible()
     assert notes.search_edit.text() == 'First'
-    assert notes.preview.toPlainText() == before
+    assert notes._selected_identity() == before
     restored = NotesWindow()
     qtbot.addWidget(restored)
     assert restored.always_topics_action.isChecked()
@@ -45,22 +45,23 @@ def test_layout_toggle_and_persistence(notes, qtbot):
     assert not notes.topic_list.isVisible()
 
 
-def test_search_order_selection_preview_and_copy(notes, qtbot):
+def test_search_order_selection_full_values_and_copy(notes, qtbot):
     notes.search_edit.setText('First')
     assert [notes.table.item(r, 1).text() for r in range(2)] == ['First', 'First beta']
-    assert notes.preview.toPlainText() == 'First line\nSecond line\n'
+    assert notes.table.item(0, 2).text() == 'First line\nSecond line\n'
     notes._copy_value()
     assert QApplication.clipboard().text() == 'First line\nSecond line\n'
     qtbot.keyClick(notes.search_edit, Qt.Key.Key_Down)
-    assert notes.preview.toPlainText() == 'Third value'
+    assert notes.table.currentRow() == 1
     notes.search_edit.setText('First ')
     assert notes._selected_identity() == ('beta', 0)
     qtbot.keyClick(notes.search_edit, Qt.Key.Key_Return)
-    assert notes.preview.hasFocus()
+    assert notes.table.hasFocus()
     notes.search_edit.setText('does not exist')
     assert not notes.copy_btn.isEnabled()
-    assert notes.preview.toPlainText() == ''
-    assert 'No matching' in notes.preview.placeholderText()
+    assert notes.table.rowCount() == 0
+    assert notes.empty_label.isVisible()
+    assert 'No matching' in notes.empty_label.text()
 
 
 def test_inline_edit_cancel_validation_commit_and_focus_safety(notes, qtbot):
@@ -86,7 +87,7 @@ def test_inline_edit_cancel_validation_commit_and_focus_safety(notes, qtbot):
     qtbot.wait(10)
     assert notes._active_editor is None
     assert storage.get_topics()['alpha'][0]['value'] == 'Updated\nvalue\n'
-    assert notes.preview.toPlainText() == 'Updated\nvalue\n'
+    assert notes.table.item(0, 1).text() == 'Updated\nvalue\n'
     assert notes.search_edit.isEnabled()
 
 
@@ -123,7 +124,8 @@ def test_global_edit_and_readonly_shortcuts(notes, qtbot):
 def test_resizing_reopening_and_reduced_motion(notes, qtbot):
     notes.resize(720, 480)
     qtbot.wait(10)
-    assert notes.result_splitter.orientation() == Qt.Orientation.Vertical
+    assert not hasattr(notes, "result_splitter")
+    assert not hasattr(notes, "preview")
     notes.close()
     notes.show()
     assert notes.width() == 720
@@ -194,11 +196,25 @@ def test_edit_action_uses_current_value_cell(notes):
     assert isinstance(notes._active_editor[1], QPlainTextEdit)
 
 
-def test_font_changes_retain_readable_preview(notes, qtbot):
-    original = notes.preview.toPlainText()
+def test_full_multiline_values_remain_visible_when_resized_or_font_changes(notes, qtbot):
+    value = 'A long note with more than a hundred characters. ' * 12 + '\nLast line\n'
+    storage.update_topic_entry('alpha', 0, 'First', value)
+    notes._refresh_entries()
+    notes.resize(720, 600)
+    qtbot.wait(30)
+    item = notes.table.item(0, 1)
+    delegate = notes.table.itemDelegateForColumn(1)
+    assert delegate.displayText(value, notes.locale()).replace('\u2028', '\n') == value
+    assert item.text() == value
+    assert notes.table.wordWrap()
+    assert notes.table.rowHeight(0) > notes.table.rowHeight(1) * 2
+    before = notes.table.rowHeight(0)
     notes._change_font_size(2)
-    assert notes.preview.font().pointSize() == notes._font_size
-    assert notes.preview.toPlainText() == original
+    qtbot.wait(30)
+    assert notes.table.font().pointSize() == notes._font_size
+    assert notes.table.item(0, 1).text() == value
+    assert notes.table.rowHeight(0) >= before
+
 
 
 @pytest.mark.parametrize('duration', [0, 120, 180])

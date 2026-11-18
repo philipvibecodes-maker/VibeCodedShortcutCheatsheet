@@ -72,3 +72,14 @@ The application has a notes window, separate from the cheatsheet window, that wi
 - Retain inline validation, Escape cancellation, Ctrl+Enter multiline commit, focus-loss
   protection, the full-value preview, and read-only shortcut/topic context cells.
 - Live app testing and new screenshots are deferred at the user's request.
+
+## Revision 16 — full values in the table
+
+- Remove compact value summaries and the separate full-note preview pane. Show complete
+  multiline key/value content directly in the table with word wrapping and content-sized rows.
+  Recalculate row heights after column resizing and font-size changes. Keep complete stored
+  values, including trailing newlines, for editing and copying.
+- Keep both topic-sidebar layouts, search matching/order, full-value copying, and direct inline
+  editing. Enter in search focuses the table; Enter or double-click in the table edits a cell.
+  Show empty-result feedback below the table.
+- Resume live-app screenshot/recording review with disposable sample data.

@@ -315,16 +315,12 @@ class EntryDialog(QDialog):
 
 
 class NotesEditDelegate(QStyledItemDelegate):
-    """Compact display with explicit, focus-safe key/value editing."""
+    """Full-value display with focus-safe inline key/value editing."""
 
     def __init__(self, table, notes, multiline=False):
         super().__init__(table)
         self.notes = notes
         self.multiline = multiline
-
-    def displayText(self, value, locale):
-        text = str(value).replace("\n", "  ·  ")
-        return text[:100] + ("…" if len(text) > 100 else "")
 
     def createEditor(self, parent, option, index):
         editor = QPlainTextEdit(parent) if self.multiline else QLineEdit(parent)
@@ -336,7 +332,7 @@ class NotesEditDelegate(QStyledItemDelegate):
     def updateEditorGeometry(self, editor, option, index):
         rect = option.rect
         if self.multiline:
-            rect.setHeight(min(130, self.parent().viewport().height() - rect.top()))
+            rect.setHeight(min(max(rect.height(), 130), self.parent().viewport().height() - rect.top()))
         editor.setGeometry(rect)
 
     def setEditorData(self, editor, index):
@@ -578,27 +574,26 @@ class NotesWindow(QMainWindow):
         )
         self.table.itemChanged.connect(self._on_item_changed)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setWordWrap(False)
+        self.table.setWordWrap(True)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self.table.currentCellChanged.connect(lambda *_: self._update_preview())
+        self.table.currentCellChanged.connect(lambda *_: self._update_selection_actions())
 
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.result_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.result_splitter.addWidget(self.table)
-        self.preview = QPlainTextEdit()
-        self.preview.setReadOnly(True)
-        self.preview.setAccessibleName("Full note value")
-        self.preview.setPlaceholderText("Select a note to read its full value.")
-        self.result_splitter.addWidget(self.preview)
-        self.result_splitter.setSizes([480, 480])
-        splitter.addWidget(self.result_splitter)
+        splitter.addWidget(self.table)
+        self._row_resize_timer = QTimer(self)
+        self._row_resize_timer.setSingleShot(True)
+        self._row_resize_timer.timeout.connect(self.table.resizeRowsToContents)
+        self.table.horizontalHeader().sectionResized.connect(lambda *_: self._row_resize_timer.start(0))
         splitter.setSizes([180, 820])
         splitter.setStretchFactor(1, 1)
         self.topic_list.setVisible(get_notes_always_show_topics())
         self.topics_btn.setChecked(get_notes_always_show_topics())
         self.topics_btn.setVisible(not get_notes_always_show_topics())
         layout.addWidget(splitter, 1)
+        self.empty_label = QLabel()
+        self.empty_label.setWordWrap(True)
+        layout.addWidget(self.empty_label)
 
         buttons = QHBoxLayout()
         self.new_topic_btn = QPushButton("New &topic")
@@ -699,13 +694,11 @@ class NotesWindow(QMainWindow):
                 return entries[index]["value"]
         return None
 
-    def _update_preview(self):
-        if not hasattr(self, "preview"):
-            return
+    def _update_selection_actions(self):
         value = self._selected_value()
-        self.preview.setPlainText(value if value is not None else "")
-        self.preview.setPlaceholderText("No matching notes." if not self.table.rowCount()
-                                        else "Select a note to read its full value.")
+        self.empty_label.setText("No matching notes." if self.search_edit.text().strip()
+                                 else "No notes in this topic.")
+        self.empty_label.setVisible(not self.table.rowCount())
         self.copy_btn.setEnabled(value is not None)
         topic, _ = self._selected_entry()
         self.edit_entry_btn.setEnabled(topic is not None)
@@ -832,7 +825,7 @@ class NotesWindow(QMainWindow):
         self._populating = True
         for row, (topic, index, key, value) in enumerate(rows):
             self.table.insertRow(row)
-            # Keep complete values in the model; only the delegate abbreviates display.
+            # Keep full values, including trailing newlines, for display and editing.
             cells = [topic, key, value] if searching else [key, value]
             editable = not self._is_readonly_topic(topic)
             for col, text in enumerate(cells):
@@ -867,7 +860,7 @@ class NotesWindow(QMainWindow):
                              if self.table.item(r, 0).data(Qt.ItemDataRole.UserRole) == previous), 0)
         if self.table.rowCount():
             self.table.setCurrentCell(selected_row, 0)
-        self._update_preview()
+        self._update_selection_actions()
         readonly = self._is_readonly_topic(self._current_topic()) or searching
         self.new_entry_btn.setEnabled(not readonly)
         topic, index = self._selected_entry()
@@ -993,7 +986,7 @@ class NotesWindow(QMainWindow):
             value = self.table.item(item.row(), 1).text()
         update_topic_entry(topic, index, key, value)
         self.table.resizeRowToContents(item.row())
-        self._update_preview()
+        self._update_selection_actions()
 
     def _delete_entry(self):
         if not self._commit_editor():
@@ -1023,9 +1016,10 @@ class NotesWindow(QMainWindow):
         font.setPointSize(self._font_size)
         self.setFont(font)
         # Styles and the native slide host can break font inheritance. Apply
-        # the preference to the whole live interface, including the preview.
+        # the preference to the whole live interface, including the table.
         for widget in self.findChildren(QWidget):
             widget.setFont(font)
+        self.table.resizeRowsToContents()
 
     def eventFilter(self, obj, event):
         if obj is self or obj is self._slide_surface:
@@ -1041,7 +1035,7 @@ class NotesWindow(QMainWindow):
                     if obj is self.table:
                         self._edit_entry()
                     else:
-                        self.preview.setFocus()
+                        self.table.setFocus()
                 return True
             if obj is self.search_edit and event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
                 row = self.table.currentRow() + (1 if event.key() == Qt.Key.Key_Down else -1)
@@ -1357,9 +1351,6 @@ class NotesWindow(QMainWindow):
         super().resizeEvent(event)
         if hasattr(self, "_fade_overlay"):
             self._fade_overlay.setGeometry(self.rect())
-        if hasattr(self, "result_splitter"):
-            self.result_splitter.setOrientation(Qt.Orientation.Vertical if self.width() < 800
-                                                else Qt.Orientation.Horizontal)
         if self.isVisible() and not self._preparing_opening:
             self._session_size = self.size()
 

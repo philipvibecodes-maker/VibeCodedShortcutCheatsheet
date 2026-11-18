@@ -93,12 +93,31 @@ with tempfile.TemporaryDirectory() as temporary:
     capture('always-topics-search')
     window.search_edit.clear()
     window.table.setCurrentCell(0, 0)
-    capture('long-note-preview')
-    window._edit_value()
+    capture('full-multiline-values')
+    assert not hasattr(window, 'preview')
+    assert window.table.wordWrap()
+    assert window.table.rowHeight(0) > window.table.rowHeight(1)
+    original_value = storage.get_topics()['Git commands'][0]['value']
+    assert window.table.item(0, 1).text() == original_value
+    position = window.table.visualItemRect(window.table.item(0, 0)).center()
+    QTest.mouseClick(window.table.viewport(), Qt.MouseButton.LeftButton, pos=position)
+    QTest.mouseDClick(window.table.viewport(), Qt.MouseButton.LeftButton, pos=position)
+    assert window._active_editor is not None
+    QTest.keyClick(window._active_editor[1], Qt.Key.Key_Escape)
+    QTest.qWait(30)
+    window.table.setCurrentCell(0, 1)
+    window.table.setFocus()
+    QTest.keyClick(window.table, Qt.Key.Key_Return)
+    assert window._active_editor is not None
     window._active_editor[1].setPlainText('git fetch origin\ngit diff origin/main...HEAD\n\nEditing this note inline.')
     capture('inline-edit')
     window._escape()
     QTest.qWait(30)
+    assert storage.get_topics()['Git commands'][0]['value'] == original_value
+    window.table.setFocus()
+    QTest.keyClick(window.table, Qt.Key.Key_C,
+                   Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
+    assert app.clipboard().text() == original_value
     window.resize(720, 600)
     (window._slide_surface or window).resize(720, 600)
     capture('narrow-always-topics')
@@ -106,6 +125,14 @@ with tempfile.TemporaryDirectory() as temporary:
     capture('narrow-collapsed')
     window.search_edit.setText('no matching note')
     capture('empty-results')
+    window.search_edit.setText('Search files')
+    QTest.keyClick(window.search_edit, Qt.Key.Key_Return)
+    assert window.table.hasFocus()
+    QTest.keyClick(window.table, Qt.Key.Key_Return)
+    assert window._active_editor is None
+    assert not window.edit_entry_btn.isEnabled()
+    window._copy_value()
+    assert app.clipboard().text() == 'Ctrl+P'
     window.close()
     QTest.qWait(100)
     background.close()
