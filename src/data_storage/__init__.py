@@ -145,6 +145,11 @@ def get_notes_fade_in_duration_ms() -> int:
     return duration
 
 
+def save_notes_fade_in_duration_ms(duration: int) -> None:
+    """Save the notes fade duration, preserving other configuration values."""
+    _save_config_value("notes_fade_in_duration_ms", duration)
+
+
 def get_notes_last_topic() -> Optional[str]:
     """Get the topic the notes window last showed, or None if never set."""
     return _get_config().get("notes_last_topic")

@@ -150,3 +150,37 @@ def test_fade_config_is_reloaded_and_can_disable_animation(qtbot, temp_data_dir)
     window.show()
     assert window.windowOpacity() == 1.0
     assert window._fade_in.state() == QAbstractAnimation.State.Stopped
+    assert window.fade_duration_slider.value() == 0
+    assert "Off" in window.fade_duration_label.text()
+
+
+def test_fade_slider_saves_and_restores_without_overwriting_settings(qtbot, temp_data_dir):
+    data_storage.save_notes_last_search("keep this")
+    window = _make_window(qtbot)
+    assert window.fade_duration_slider.value() == 120
+    window.fade_duration_slider.setValue(350)
+    assert data_storage.get_notes_fade_in_duration_ms() == 350
+    assert data_storage.get_notes_last_search() == "keep this"
+    restored = _make_window(qtbot)
+    assert restored.fade_duration_slider.value() == 350
+    assert "350 ms" in restored.fade_duration_label.text()
+    restored.show()
+    assert restored._fade_in.duration() == 350
+
+
+def test_fade_slider_in_notes_menu_supports_keyboard(qtbot, temp_data_dir):
+    data_storage.save_notes_fade_in_duration_ms(0)
+    window = _make_window(qtbot)
+    window.show()
+    menu = window.menuBar().actions()[0].menu()
+    menu.popup(window.menuBar().mapToGlobal(window.menuBar().rect().bottomLeft()))
+    qtbot.waitUntil(lambda: window.fade_duration_slider.hasFocus())
+    qtbot.keyClick(window.fade_duration_slider, Qt.Key.Key_Right)
+    assert data_storage.get_notes_fade_in_duration_ms() == 10
+    assert "10 ms" in window.fade_duration_label.text()
+    qtbot.keyClick(window.fade_duration_slider, Qt.Key.Key_End)
+    assert data_storage.get_notes_fade_in_duration_ms() == 1000
+    qtbot.keyClick(window.fade_duration_slider, Qt.Key.Key_Home)
+    assert data_storage.get_notes_fade_in_duration_ms() == 0
+    assert "Off" in window.fade_duration_label.text()
+    menu.close()

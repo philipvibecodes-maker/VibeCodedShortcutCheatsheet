@@ -16,12 +16,14 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QSlider,
     QSplitter,
     QStyledItemDelegate,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
 from src.platform import get_focused_window
@@ -36,6 +38,7 @@ from src.data_storage import (
     get_notes_last_search,
     get_notes_last_topic,
     get_topics,
+    save_notes_fade_in_duration_ms,
     save_notes_font_size,
     save_notes_last_search,
     save_notes_last_topic,
@@ -48,6 +51,13 @@ DARK_THEME = """
     }
     QLabel {
         color: #e0e0e0;
+    }
+    QMenuBar, QMenu {
+        background-color: #2b2b2b;
+        color: #e0e0e0;
+    }
+    QMenuBar::item:selected {
+        background-color: #444;
     }
     QLineEdit, QPlainTextEdit {
         background-color: #333;
@@ -221,6 +231,34 @@ class NotesWindow(QMainWindow):
         self._fade_in.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.setStyleSheet(DARK_THEME)
         self._font_size = get_notes_font_size()
+
+        notes_menu = self.menuBar().addMenu("&Notes")
+        fade_controls = QWidget()
+        fade_layout = QVBoxLayout(fade_controls)
+        self.fade_duration_label = QLabel()
+        fade_layout.addWidget(self.fade_duration_label)
+        self.fade_duration_slider = QSlider(Qt.Orientation.Horizontal)
+        self.fade_duration_slider.setRange(0, 1000)
+        self.fade_duration_slider.setSingleStep(10)
+        self.fade_duration_slider.setPageStep(100)
+        self.fade_duration_slider.setMinimumWidth(240)
+        self.fade_duration_slider.setAccessibleName("Fade-in time")
+        fade_controls.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        fade_controls.setFocusProxy(self.fade_duration_slider)
+        self.fade_duration_slider.setToolTip("Applies next time notes opens. 0 disables the fade.")
+        # Persist once per drag, while still displaying the time as it moves.
+        self.fade_duration_slider.setTracking(False)
+        self.fade_duration_slider.sliderMoved.connect(self._update_fade_label)
+        self.fade_duration_slider.valueChanged.connect(self._save_fade_duration)
+        self.fade_duration_label.setBuddy(self.fade_duration_slider)
+        fade_layout.addWidget(self.fade_duration_slider)
+        fade_action = QWidgetAction(notes_menu)
+        fade_action.setDefaultWidget(fade_controls)
+        notes_menu.addAction(fade_action)
+        notes_menu.aboutToShow.connect(
+            lambda: QTimer.singleShot(0, self.fade_duration_slider.setFocus)
+        )
+        self._sync_fade_controls(get_notes_fade_in_duration_ms())
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -557,12 +595,27 @@ class NotesWindow(QMainWindow):
 
     # --- window behavior --------------------------------------------------
 
+    def _update_fade_label(self, duration):
+        value = f"{duration} ms" if duration else "Off"
+        self.fade_duration_label.setText(f"&Fade-in time: {value}")
+
+    def _save_fade_duration(self, duration):
+        self._update_fade_label(duration)
+        save_notes_fade_in_duration_ms(duration)
+
+    def _sync_fade_controls(self, duration):
+        self.fade_duration_slider.blockSignals(True)
+        self.fade_duration_slider.setValue(duration)
+        self.fade_duration_slider.blockSignals(False)
+        self._update_fade_label(duration)
+
     def showEvent(self, event):
         if event.spontaneous():
             super().showEvent(event)
             return
         self._fade_in.stop()
         duration = get_notes_fade_in_duration_ms()
+        self._sync_fade_controls(duration)
         # Set opacity before mapping to avoid a fully opaque first frame.
         self.setWindowOpacity(0.0 if duration else 1.0)
         super().showEvent(event)
