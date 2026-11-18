@@ -209,6 +209,10 @@ class NotesWindow(QMainWindow):
             | Qt.WindowType.WindowMaximizeButtonHint
             | Qt.WindowType.WindowCloseButtonHint
         )
+        # GNOME animates normal windows when mapped. Utility windows appear
+        # immediately; this X11 hint also works under XWayland and is ignored
+        # on other platforms. Keep the normal Qt title bar and window controls.
+        self.setAttribute(Qt.WidgetAttribute.WA_X11NetWmWindowTypeUtility)
         self.setStyleSheet(DARK_THEME)
         self._font_size = get_notes_font_size()
 
