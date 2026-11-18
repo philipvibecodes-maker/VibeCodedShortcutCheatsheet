@@ -225,6 +225,8 @@ class NotesWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.topic_list = QListWidget()
         self.topic_list.currentItemChanged.connect(self._on_topic_changed)
+        # Clicking the current topic should also leave global search results.
+        self.topic_list.itemClicked.connect(lambda _item: self.search_edit.clear())
         splitter.addWidget(self.topic_list)
 
         self.table = QTableWidget()
@@ -324,7 +326,11 @@ class NotesWindow(QMainWindow):
     def _on_topic_changed(self, current, previous):
         if current is not None:
             save_notes_last_topic(current.data(Qt.ItemDataRole.UserRole))
-        self._refresh_entries()
+        if self.search_edit.text():
+            # textChanged refreshes rows and persists the cleared search.
+            self.search_edit.clear()
+        else:
+            self._refresh_entries()
 
     def _refresh_topics(self, select=None):
         current = select or self._current_topic()
