@@ -2,7 +2,7 @@
 
 from functools import partial
 
-from PyQt6.QtCore import QEasingCurve, QEvent, QTimeLine, Qt, QTimer
+from PyQt6.QtCore import QEasingCurve, QEvent, QPoint, QTimeLine, Qt, QTimer
 from PyQt6.QtGui import QActionGroup, QColor, QFont, QKeySequence, QPainter, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
@@ -715,18 +715,22 @@ class NotesWindow(QMainWindow):
         self._fade_overlay.setProgress(0.0 if duration else 1.0)
         self._fade_overlay.setVisible(bool(duration) and self._animation_strategy == "fade")
         self._fade_overlay.raise_()
-        super().showEvent(event)
-        screen = QApplication.primaryScreen().availableGeometry()
+        display = self.screen() or QApplication.primaryScreen()
+        screen = display.availableGeometry()
         self.resize(int(screen.width() * 0.7), int(screen.height() * 0.7))
-        self.move(
+        self._slide_target = QPoint(
             screen.x() + (screen.width() - self.width()) // 2,
             screen.y() + (screen.height() - self.height()) // 2,
         )
-        self._slide_target = self.pos()
-        self._slide_start_y = screen.top() - self.frameGeometry().height()
+        # Use the physical screen edge, not the work area below GNOME's bar.
+        # Leave a margin for shadows and decorations that arrive during mapping.
+        self._slide_start_y = display.geometry().top() - self.frameGeometry().height() - 32
         if duration and self._animation_strategy == "slide":
             self.move(self._slide_target.x(), self._slide_start_y)
+        else:
+            self.move(self._slide_target)
         self._fade_overlay.setGeometry(self.rect())
+        super().showEvent(event)
         self.search_edit.setFocus()
         if duration:
             self._fade_in.start()

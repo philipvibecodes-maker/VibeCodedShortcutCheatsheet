@@ -314,3 +314,13 @@ def test_startup_speed_saves_and_applies(qtbot, temp_data_dir, speed):
     assert restored.startup_speed_combo.currentData() == speed
     restored.show()
     assert restored._fade_in.easingCurve().valueForProgress(0.5) == pytest.approx(1 - 0.5 ** speed)
+
+
+def test_slide_starts_entirely_above_physical_screen(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy('slide')
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window = _make_window(qtbot)
+    window.show()
+    assert window.frameGeometry().bottom() < window.screen().geometry().top()
+    assert window._slide_target.y() >= window.screen().availableGeometry().top()
+    window.close()
