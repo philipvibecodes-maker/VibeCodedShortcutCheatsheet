@@ -5,6 +5,7 @@ The application has a notes window, separate from the cheatsheet window, that wi
 - be large and centered on the screen.
 - fade in using native window opacity (default 120 ms), while continuing to bypass GNOME's opening animation. Configure `notes_fade_in_duration_ms` in `data/config.json` (integer 0–1000; 0 disables the fade, invalid values use the default). Read the setting on each opening, stop the fade when hidden, and keep keyboard input available throughout.
 - expose a keyboard-accessible Fade-in time slider in the Notes menu (0–1000 ms, showing Off at 0); save automatically on adjustment, preserving other settings, and apply the duration on the next opening.
+- start the fade only after the native window is exposed, progressing linearly from transparent to opaque over the full configured duration; window mapping must not consume animation time.
 - reopen on the topic that was selected when it was last open (persisted to `config.json` as `notes_last_topic`, falling back to the first topic when it no longer exists).
 - let the user record key/value pairs under user-defined topics (e.g. a topic `git` with a row "compare to origin main" and multi-line text as its value).
 - show recorded app shortcuts as read-only topics named `shortcuts/<app_name>` (key = description, value = keys).

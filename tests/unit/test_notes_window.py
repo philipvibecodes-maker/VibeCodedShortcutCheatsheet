@@ -6,7 +6,7 @@ Runs offscreen with data storage redirected to a tmp dir.
 import json
 
 import pytest
-from PyQt6.QtCore import QAbstractAnimation, Qt
+from PyQt6.QtCore import QAbstractAnimation, QEvent, Qt
 
 from src import data_storage
 from src.notes.notes_window import NotesWindow
@@ -129,13 +129,48 @@ def test_fade_in_progresses_and_finishes(qtbot, temp_data_dir):
 def test_interrupted_fade_stops_and_reopens(qtbot, temp_data_dir, hide_method):
     window = _make_window(qtbot)
     window.show()
+    qtbot.waitUntil(lambda: window._fade_in.state() == QAbstractAnimation.State.Running)
     getattr(window, hide_method)()
     assert window._fade_in.state() == QAbstractAnimation.State.Stopped
     assert window.windowOpacity() == 1.0
     window.show()
     assert window.windowOpacity() == 0.0
-    assert window._fade_in.state() == QAbstractAnimation.State.Running
+    qtbot.waitUntil(lambda: window._fade_in.state() == QAbstractAnimation.State.Running)
     qtbot.waitUntil(lambda: window._fade_in.state() == QAbstractAnimation.State.Stopped)
+    assert window.windowOpacity() == 1.0
+
+
+def test_fade_waits_for_exposure_then_uses_full_linear_duration(
+        qtbot, temp_data_dir, monkeypatch):
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window = _make_window(qtbot)
+    window.winId()  # Create the native handle before simulating delayed mapping.
+    handle = window.windowHandle()
+    exposed = False
+    monkeypatch.setattr(handle, "isExposed", lambda: exposed)
+    window.show()
+    qtbot.wait(150)
+    assert window.windowOpacity() == 0.0
+    assert window._fade_in.state() == QAbstractAnimation.State.Stopped
+    assert window._fade_in.currentTime() == 0
+
+    exposed = True
+    window.eventFilter(handle, QEvent(QEvent.Type.Expose))
+    qtbot.waitUntil(lambda: window._fade_in.state() == QAbstractAnimation.State.Running)
+    for elapsed in (0, 250, 500, 750, 1000):
+        window._fade_in.setCurrentTime(elapsed)
+        assert window.windowOpacity() == pytest.approx(elapsed / 1000, abs=0.005)
+    assert window._fade_in.state() == QAbstractAnimation.State.Stopped
+
+
+def test_hiding_before_exposure_cancels_pending_fade(qtbot, temp_data_dir):
+    window = _make_window(qtbot)
+    window.show()
+    window.hide()
+    qtbot.wait(50)
+    assert not window._fade_pending
+    assert not window._fade_start_timer.isActive()
+    assert window._fade_in.state() == QAbstractAnimation.State.Stopped
     assert window.windowOpacity() == 1.0
 
 

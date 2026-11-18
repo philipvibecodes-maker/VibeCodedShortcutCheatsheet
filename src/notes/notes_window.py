@@ -228,7 +228,12 @@ class NotesWindow(QMainWindow):
         self._fade_in = QPropertyAnimation(self, b"windowOpacity", self)
         self._fade_in.setStartValue(0.0)
         self._fade_in.setEndValue(1.0)
-        self._fade_in.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._fade_in.setEasingCurve(QEasingCurve.Type.Linear)
+        self._fade_pending = False
+        self._fade_start_timer = QTimer(self)
+        self._fade_start_timer.setSingleShot(True)
+        self._fade_start_timer.setInterval(0)
+        self._fade_start_timer.timeout.connect(self._start_fade_in)
         self.setStyleSheet(DARK_THEME)
         self._font_size = get_notes_font_size()
 
@@ -559,6 +564,10 @@ class NotesWindow(QMainWindow):
         self.table.horizontalHeader().setFont(font)
 
     def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.Expose and obj is self.windowHandle():
+            if self._fade_pending:
+                # Let Qt finish exposing/painting the native window first.
+                self._fade_start_timer.start()
         # Item views consume '/' for their own keyboard search; intercept it
         # to focus the search bar instead.
         if (
@@ -614,7 +623,10 @@ class NotesWindow(QMainWindow):
             super().showEvent(event)
             return
         self._fade_in.stop()
+        self._fade_start_timer.stop()
         duration = get_notes_fade_in_duration_ms()
+        self._fade_pending = bool(duration)
+        self._fade_in.setDuration(duration)
         self._sync_fade_controls(duration)
         # Set opacity before mapping to avoid a fully opaque first frame.
         self.setWindowOpacity(0.0 if duration else 1.0)
@@ -626,12 +638,23 @@ class NotesWindow(QMainWindow):
             screen.y() + (screen.height() - self.height()) // 2,
         )
         self.search_edit.setFocus()
-        if duration:
-            self._fade_in.setDuration(duration)
+        handle = self.windowHandle()
+        if handle is not None:
+            handle.installEventFilter(self)
+            if self._fade_pending and handle.isExposed():
+                self._fade_start_timer.start()
+
+    def _start_fade_in(self):
+        handle = self.windowHandle()
+        if (self._fade_pending and self.isVisible()
+                and handle is not None and handle.isExposed()):
+            self._fade_pending = False
             self._fade_in.start()
 
     def hideEvent(self, event):
         # Closing/toggling during the fade must leave no running animation.
+        self._fade_start_timer.stop()
+        self._fade_pending = False
         self._fade_in.stop()
         self.setWindowOpacity(1.0)
         super().hideEvent(event)
