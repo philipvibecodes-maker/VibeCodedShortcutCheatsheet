@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.platform import get_focused_window
+from src.notes.backdrop import NotesBackdrop
 from src.data_storage import (
     add_topic,
     add_topic_entry,
@@ -42,6 +43,7 @@ from src.data_storage import (
     get_notes_fade_in_duration_ms,
     get_notes_animation_strategy,
     get_notes_animation_startup_speed,
+    get_notes_backdrop_opacity,
     get_notes_font_size,
     get_notes_last_search,
     get_notes_last_topic,
@@ -49,6 +51,7 @@ from src.data_storage import (
     save_notes_fade_in_duration_ms,
     save_notes_animation_strategy,
     save_notes_animation_startup_speed,
+    save_notes_backdrop_opacity,
     save_notes_font_size,
     save_notes_last_search,
     save_notes_last_topic,
@@ -368,6 +371,8 @@ class NotesWindow(QMainWindow):
         self._fade_in.setEasingCurve(easing)
         self._animation_strategy = get_notes_animation_strategy()
         self._slide_surface = None
+        self._backdrop = None
+        self._opening_progress = 1.0
         self._slide_handoff = False
         self._slide_target = None
         self._fade_in.valueChanged.connect(self._animate_opening)
@@ -434,6 +439,17 @@ class NotesWindow(QMainWindow):
         )
         startup_label.setBuddy(self.startup_speed_combo)
         fade_layout.addWidget(self.startup_speed_combo)
+        self.backdrop_label = QLabel()
+        fade_layout.addWidget(self.backdrop_label)
+        self.backdrop_slider = _DurationSlider(Qt.Orientation.Horizontal)
+        self.backdrop_slider.setRange(0, 100)
+        self.backdrop_slider.setValue(get_notes_backdrop_opacity())
+        self.backdrop_slider.setAccessibleName("Background blur opacity")
+        self.backdrop_slider.setTracking(False)
+        self.backdrop_slider.valueChanged.connect(self._save_backdrop_opacity)
+        self.backdrop_label.setBuddy(self.backdrop_slider)
+        self.backdrop_label.setText(f"Background &blur opacity: {self.backdrop_slider.value()}%")
+        fade_layout.addWidget(self.backdrop_slider)
         fade_action = QWidgetAction(notes_menu)
         fade_action.setDefaultWidget(fade_controls)
         notes_menu.addAction(fade_action)
@@ -801,7 +817,39 @@ class NotesWindow(QMainWindow):
         else:
             super().raise_()
 
+    def _save_backdrop_opacity(self, opacity):
+        save_notes_backdrop_opacity(opacity)
+        self.backdrop_label.setText(f"Background &blur opacity: {opacity}%")
+        if self._backdrop is None and opacity and self.isVisible():
+            self._create_backdrop()
+            self.raise_()
+        self._update_backdrop()
+
+    def _create_backdrop(self):
+        if self._backdrop is None and get_notes_backdrop_opacity():
+            self._backdrop = NotesBackdrop(self.screen(), self.close)
+            self._backdrop.show()
+
+    def _update_backdrop(self):
+        if self._backdrop is not None:
+            self._backdrop.setStrength(self._opening_progress * self.backdrop_slider.value() / 100)
+
+    def _remove_backdrop(self):
+        if self._backdrop is not None:
+            self._backdrop.hide()
+            self._backdrop.deleteLater()
+            self._backdrop = None
+
     def show(self):
+        if not self.isVisible():
+            opacity = get_notes_backdrop_opacity()
+            self.backdrop_slider.blockSignals(True)
+            self.backdrop_slider.setValue(opacity)
+            self.backdrop_slider.blockSignals(False)
+            self.backdrop_label.setText(f"Background &blur opacity: {opacity}%")
+            self._opening_progress = 0.0 if get_notes_fade_in_duration_ms() else 1.0
+            self._create_backdrop()
+            self._update_backdrop()
         if (get_notes_animation_strategy() == "slide"
                 and get_notes_fade_in_duration_ms() and not self.isVisible()):
             self._prepare_opening()
@@ -874,6 +922,8 @@ class NotesWindow(QMainWindow):
         return duration
 
     def _animate_opening(self, progress):
+        self._opening_progress = progress
+        self._update_backdrop()
         if self._animation_strategy == "slide" and self._slide_target is not None:
             y = round(self._slide_start_y +
                       (self._slide_target.y() - self._slide_start_y) * progress)
@@ -883,6 +933,9 @@ class NotesWindow(QMainWindow):
             self._fade_overlay.setProgress(progress)
 
     def _finish_opening(self, show_destination=True):
+        if show_destination:
+            self._opening_progress = 1.0
+            self._update_backdrop()
         if self._slide_surface is not None and show_destination:
             # Keep the exact native surface: reparenting/remapping here causes
             # a compositor flash and changes the shadow at the end of the slide.
@@ -913,6 +966,7 @@ class NotesWindow(QMainWindow):
             self._fade_overlay.setGeometry(self.rect())
 
     def closeEvent(self, event):
+        self._remove_backdrop()
         if self._slide_surface is not None:
             self._fade_in.stop()
             self._finish_opening(show_destination=False)
@@ -922,6 +976,7 @@ class NotesWindow(QMainWindow):
         if self._slide_handoff:
             super().hideEvent(event)
             return
+        self._remove_backdrop()
         # Closing/toggling during the fade must leave no running animation.
         self._fade_in.stop()
         self._finish_opening(show_destination=False)

@@ -376,3 +376,40 @@ def test_title_bar_stays_visible_across_slide_handoff(qtbot, temp_data_dir):
     title_bar._toggle_maximized()
     assert surface.geometry() == original_geometry
     assert int(surface.winId()) == native_id
+
+
+@pytest.mark.parametrize('strategy', ['fade', 'slide'])
+def test_backdrop_follows_animation_and_live_opacity(qtbot, temp_data_dir, strategy):
+    data_storage.save_notes_animation_strategy(strategy)
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window = _make_window(qtbot)
+    window.show()
+    backdrop = window._backdrop
+    assert backdrop is not None
+    assert backdrop.isVisible()
+    assert backdrop._effect.opacity() == 0
+    window._fade_in.setCurrentTime(500)
+    assert backdrop._effect.opacity() == pytest.approx(0.875 * 0.6)
+    window.backdrop_slider.setValue(80)
+    assert data_storage.get_notes_backdrop_opacity() == 80
+    assert backdrop._effect.opacity() == pytest.approx(0.875 * 0.8)
+    window._fade_in.setCurrentTime(1000)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert backdrop._effect.opacity() == pytest.approx(0.8)
+    window.close()
+    assert window._backdrop is None
+    assert not backdrop.isVisible()
+
+
+def test_backdrop_disabled_and_dismissed_by_click(qtbot, temp_data_dir):
+    data_storage.save_notes_backdrop_opacity(0)
+    window = _make_window(qtbot)
+    window.show()
+    assert window._backdrop is None
+    window.close()
+    data_storage.save_notes_backdrop_opacity(60)
+    window.show()
+    backdrop = window._backdrop
+    qtbot.mouseClick(backdrop, Qt.MouseButton.LeftButton)
+    assert not window.isVisible()
+    assert window._backdrop is None

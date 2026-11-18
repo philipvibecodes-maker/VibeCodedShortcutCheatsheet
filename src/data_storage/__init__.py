@@ -168,6 +168,15 @@ def save_notes_animation_startup_speed(speed: int) -> None:
     _save_config_value("notes_animation_startup_speed", speed)
 
 
+def get_notes_backdrop_opacity() -> int:
+    opacity = _get_config().get("notes_backdrop_opacity", 60)
+    return opacity if type(opacity) is int and 0 <= opacity <= 100 else 60
+
+
+def save_notes_backdrop_opacity(opacity: int) -> None:
+    _save_config_value("notes_backdrop_opacity", opacity)
+
+
 def get_notes_last_topic() -> Optional[str]:
     """Get the topic the notes window last showed, or None if never set."""
     return _get_config().get("notes_last_topic")
