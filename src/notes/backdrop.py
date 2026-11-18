@@ -15,6 +15,10 @@ def blurred_desktop(screen):
     small = capture.scaled(max(1, capture.width() // 4), max(1, capture.height() // 4),
                            Qt.AspectRatioMode.IgnoreAspectRatio,
                            Qt.TransformationMode.SmoothTransformation)
+    # The scene and render image below use physical pixel coordinates. Qt
+    # preserves capture DPR during scaling; at 2x that otherwise makes the
+    # item occupy only the upper-left quarter of the rendering rectangle.
+    small.setDevicePixelRatio(1.0)
     scene = QGraphicsScene()
     item = scene.addPixmap(small)
     blur = QGraphicsBlurEffect()
