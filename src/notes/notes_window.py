@@ -266,11 +266,6 @@ class NotesWindow(QMainWindow):
         self._slide_target = None
         self._fade_in.valueChanged.connect(self._animate_opening)
         self._fade_in.finished.connect(self._finish_opening)
-        self._fade_pending = False
-        self._fade_start_timer = QTimer(self)
-        self._fade_start_timer.setSingleShot(True)
-        self._fade_start_timer.setInterval(0)
-        self._fade_start_timer.timeout.connect(self._start_fade_in)
         self.setStyleSheet(DARK_THEME)
         self._font_size = get_notes_font_size()
 
@@ -616,10 +611,6 @@ class NotesWindow(QMainWindow):
         self.table.horizontalHeader().setFont(font)
 
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.Type.Expose and obj is self.windowHandle():
-            if self._fade_pending:
-                # Let Qt finish exposing/painting the native window first.
-                self._fade_start_timer.start()
         # Item views consume '/' for their own keyboard search; intercept it
         # to focus the search bar instead.
         if (
@@ -675,11 +666,9 @@ class NotesWindow(QMainWindow):
             super().showEvent(event)
             return
         self._fade_in.stop()
-        self._fade_start_timer.stop()
         duration = get_notes_fade_in_duration_ms()
         self._animation_strategy = get_notes_animation_strategy()
         self.animation_actions[self._animation_strategy].setChecked(True)
-        self._fade_pending = bool(duration)
         self._fade_in.setDuration(max(1, duration))
         self._sync_fade_controls(duration)
         self._fade_overlay.setProgress(0.0 if duration else 1.0)
@@ -698,17 +687,7 @@ class NotesWindow(QMainWindow):
             self.move(self._slide_target.x(), self._slide_start_y)
         self._fade_overlay.setGeometry(self.rect())
         self.search_edit.setFocus()
-        handle = self.windowHandle()
-        if handle is not None:
-            handle.installEventFilter(self)
-            if self._fade_pending and handle.isExposed():
-                self._fade_start_timer.start()
-
-    def _start_fade_in(self):
-        handle = self.windowHandle()
-        if (self._fade_pending and self.isVisible()
-                and handle is not None and handle.isExposed()):
-            self._fade_pending = False
+        if duration:
             self._fade_in.start()
 
     def _animate_opening(self, progress):
@@ -731,8 +710,6 @@ class NotesWindow(QMainWindow):
 
     def hideEvent(self, event):
         # Closing/toggling during the fade must leave no running animation.
-        self._fade_start_timer.stop()
-        self._fade_pending = False
         self._fade_in.stop()
         self._finish_opening()
         self._fade_overlay.hide()

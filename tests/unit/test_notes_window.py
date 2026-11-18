@@ -6,7 +6,7 @@ Runs offscreen with data storage redirected to a tmp dir.
 import json
 
 import pytest
-from PyQt6.QtCore import QEvent, QTimeLine, Qt
+from PyQt6.QtCore import QTimeLine, Qt
 
 from src import data_storage
 from src.notes.notes_window import NotesWindow
@@ -145,23 +145,20 @@ def test_interrupted_fade_stops_and_reopens(qtbot, temp_data_dir, hide_method):
     assert not window._fade_overlay.isVisible()
 
 
-def test_fade_waits_for_exposure_then_uses_full_smooth_duration(
-        qtbot, temp_data_dir, monkeypatch):
+@pytest.mark.parametrize("strategy", ["fade", "slide"])
+def test_animation_starts_immediately_without_waiting_for_exposure(
+        qtbot, temp_data_dir, monkeypatch, strategy):
     data_storage.save_notes_fade_in_duration_ms(1000)
+    data_storage.save_notes_animation_strategy(strategy)
     window = _make_window(qtbot)
-    window.winId()  # Create the native handle before simulating delayed mapping.
-    handle = window.windowHandle()
-    exposed = False
-    monkeypatch.setattr(handle, "isExposed", lambda: exposed)
+    window.winId()
+    monkeypatch.setattr(window.windowHandle(), "isExposed", lambda: False)
     window.show()
-    qtbot.wait(150)
-    assert window._fade_overlay.progress == 0.0
-    assert window._fade_in.state() == QTimeLine.State.NotRunning
-    assert window._fade_in.currentTime() == 0
-
-    exposed = True
-    window.eventFilter(handle, QEvent(QEvent.Type.Expose))
-    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
+    assert window._fade_in.state() == QTimeLine.State.Running
+    qtbot.waitUntil(lambda: window._fade_in.currentTime() > 0)
+    if strategy == "slide":
+        window.close()
+        return
     for elapsed, expected in ((0, 0), (250, 0.15625), (500, 0.5),
                               (750, 0.84375), (1000, 1)):
         window._fade_in.setCurrentTime(elapsed)
@@ -169,13 +166,11 @@ def test_fade_waits_for_exposure_then_uses_full_smooth_duration(
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
 
 
-def test_hiding_before_exposure_cancels_pending_fade(qtbot, temp_data_dir):
+def test_hiding_immediately_stops_animation(qtbot, temp_data_dir):
     window = _make_window(qtbot)
     window.show()
     window.hide()
     qtbot.wait(50)
-    assert not window._fade_pending
-    assert not window._fade_start_timer.isActive()
     assert window._fade_in.state() == QTimeLine.State.NotRunning
     assert window._fade_overlay.progress == 1.0
     assert not window._fade_overlay.isVisible()
