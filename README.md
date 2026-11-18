@@ -55,6 +55,11 @@ venv\Scripts\pip install PyQt6
 
 ## Running the Application
 
+The tray icon includes the running revision number (also shown in its tooltip).
+Restart the existing application after updating: another launch forwards to the
+running instance and does not reload its code. Delivered changes increment
+`APP_REVISION` in `src/version.py`; the first numbered update is revision 1.
+
 ```bash
 # Linux — the app must run under XWayland for proper window positioning:
 QT_QPA_PLATFORM=xcb venv/bin/python main.py
