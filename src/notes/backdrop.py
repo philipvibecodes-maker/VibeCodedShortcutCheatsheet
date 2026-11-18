@@ -1,8 +1,8 @@
 """A cached desktop blur; only its compositing strength changes per frame."""
 
-from PyQt6.QtCore import QRectF, Qt
+from PyQt6.QtCore import QRect, QRectF, Qt
 from PyQt6.QtGui import QColor, QImage, QPainter, QPixmap
-from PyQt6.QtWidgets import QGraphicsBlurEffect, QGraphicsOpacityEffect, QGraphicsScene, QLabel
+from PyQt6.QtWidgets import QGraphicsBlurEffect, QGraphicsScene, QWidget
 
 
 def blurred_desktop(screen):
@@ -19,21 +19,36 @@ def blurred_desktop(screen):
     # preserves capture DPR during scaling; at 2x that otherwise makes the
     # item occupy only the upper-left quarter of the rendering rectangle.
     small.setDevicePixelRatio(1.0)
+    # Extend edge pixels before blurring. Sampling transparent space outside
+    # the capture otherwise creates a dark frame around the whole desktop.
+    padding = 32
+    width, height = small.width(), small.height()
+    padded = QPixmap(width + 2 * padding, height + 2 * padding)
+    painter = QPainter(padded)
+    columns = ((0, padding, 0, 1), (padding, width, 0, width),
+               (padding + width, padding, width - 1, 1))
+    rows = ((0, padding, 0, 1), (padding, height, 0, height),
+            (padding + height, padding, height - 1, 1))
+    for x, w, sx, sw in columns:
+        for y, h, sy, sh in rows:
+            painter.drawPixmap(QRect(x, y, w, h), small, QRect(sx, sy, sw, sh))
+    painter.end()
     scene = QGraphicsScene()
-    item = scene.addPixmap(small)
+    item = scene.addPixmap(padded)
     blur = QGraphicsBlurEffect()
     blur.setBlurRadius(10)
     item.setGraphicsEffect(blur)
-    rect = QRectF(0, 0, small.width(), small.height())
+    source = QRectF(padding, padding, width, height)
+    target = QRectF(0, 0, width, height)
     image = QImage(small.size(), QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(QColor("#151515"))
     painter = QPainter(image)
-    scene.render(painter, rect, rect)
+    scene.render(painter, target, source)
     painter.end()
     return QPixmap.fromImage(image)
 
 
-class NotesBackdrop(QLabel):
+class NotesBackdrop(QWidget):
     def __init__(self, screen, close_notes):
         super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
                          | Qt.WindowType.X11BypassWindowManagerHint
@@ -42,15 +57,28 @@ class NotesBackdrop(QLabel):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setGeometry(screen.geometry())
-        self.setPixmap(blurred_desktop(screen))
-        self.setScaledContents(True)
-        self._effect = QGraphicsOpacityEffect(self)
-        self._effect.setOpacity(0)
-        self.setGraphicsEffect(self._effect)
+        self._image = blurred_desktop(screen).scaled(
+            screen.geometry().size(), Qt.AspectRatioMode.IgnoreAspectRatio,
+            Qt.TransformationMode.SmoothTransformation)
+        self.strength = 0.0
         self._close_notes = close_notes
 
     def setStrength(self, strength):
-        self._effect.setOpacity(strength)
+        strength = max(0.0, min(1.0, strength))
+        if self.strength != strength:
+            self.strength = strength
+            self.update()
+
+    def paintEvent(self, event):
+        # Composite the cached image directly. A graphics opacity effect on a
+        # screen-sized widget adds an unnecessary full-screen intermediate.
+        painter = QPainter(self)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.fillRect(event.rect(), Qt.GlobalColor.transparent)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        painter.setOpacity(self.strength)
+        painter.drawPixmap(0, 0, self._image)
+        painter.end()
 
     def mousePressEvent(self, event):
         self._close_notes()

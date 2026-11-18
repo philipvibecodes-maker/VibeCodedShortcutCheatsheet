@@ -372,6 +372,7 @@ class NotesWindow(QMainWindow):
         self._animation_strategy = get_notes_animation_strategy()
         self._slide_surface = None
         self._backdrop = None
+        self._backdrop_exclusion = None
         self._opening_progress = 1.0
         self.installEventFilter(self)
         self._slide_handoff = False
@@ -832,6 +833,7 @@ class NotesWindow(QMainWindow):
 
     def _create_backdrop(self):
         if self._backdrop is None and get_notes_backdrop_opacity():
+            self._backdrop_exclusion = None
             self._backdrop = NotesBackdrop(self.screen(), self.close)
             self._backdrop.show()
 
@@ -845,7 +847,9 @@ class NotesWindow(QMainWindow):
             surface = self._slide_surface or self
             exclusion = surface.rect().translated(
                 surface.mapToGlobal(QPoint(0, 0)) - self._backdrop.pos())
-            self._backdrop.setMask(QRegion(self._backdrop.rect()).subtracted(QRegion(exclusion)))
+            if exclusion != self._backdrop_exclusion:
+                self._backdrop_exclusion = exclusion
+                self._backdrop.setMask(QRegion(self._backdrop.rect()).subtracted(QRegion(exclusion)))
 
     def _remove_backdrop(self):
         if self._backdrop is not None:
@@ -921,6 +925,9 @@ class NotesWindow(QMainWindow):
         self._fade_overlay.raise_()
         display = self.screen() or QApplication.primaryScreen()
         screen = display.availableGeometry()
+        # Avoid rendering two full-screen frames for each 60 Hz presentation.
+        interval = round(1000 / max(30.0, display.refreshRate()))
+        self._fade_in.setUpdateInterval(max(8, min(33, interval)))
         self.resize(int(screen.width() * 0.7), int(screen.height() * 0.7))
         self._slide_target = QPoint(
             screen.x() + (screen.width() - self.width()) // 2,
@@ -938,7 +945,6 @@ class NotesWindow(QMainWindow):
 
     def _animate_opening(self, progress):
         self._opening_progress = progress
-        self._update_backdrop()
         if self._animation_strategy == "slide" and self._slide_target is not None:
             y = round(self._slide_start_y +
                       (self._slide_target.y() - self._slide_start_y) * progress)
@@ -946,6 +952,7 @@ class NotesWindow(QMainWindow):
             surface.move(self._slide_target.x(), y)
         else:
             self._fade_overlay.setProgress(progress)
+        self._update_backdrop()
 
     def _finish_opening(self, show_destination=True):
         if show_destination:

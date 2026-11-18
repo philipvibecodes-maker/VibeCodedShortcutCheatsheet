@@ -387,15 +387,15 @@ def test_backdrop_follows_animation_and_live_opacity(qtbot, temp_data_dir, strat
     backdrop = window._backdrop
     assert backdrop is not None
     assert backdrop.isVisible()
-    assert backdrop._effect.opacity() == 0
+    assert backdrop.strength == 0
     window._fade_in.setCurrentTime(500)
-    assert backdrop._effect.opacity() == pytest.approx(0.875 * 0.6)
+    assert backdrop.strength == pytest.approx(0.875 * 0.6)
     window.backdrop_slider.setValue(80)
     assert data_storage.get_notes_backdrop_opacity() == 80
-    assert backdrop._effect.opacity() == pytest.approx(0.875 * 0.8)
+    assert backdrop.strength == pytest.approx(0.875 * 0.8)
     window._fade_in.setCurrentTime(1000)
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
-    assert backdrop._effect.opacity() == pytest.approx(0.8)
+    assert backdrop.strength == pytest.approx(0.8)
     window.close()
     assert window._backdrop is None
     assert not backdrop.isVisible()
@@ -438,3 +438,12 @@ def test_backdrop_never_covers_notes_and_tracks_window(qtbot, temp_data_dir, str
     surface.move(surface.x() + 20, surface.y() + 20)
     surface.resize(surface.width() - 40, surface.height() - 40)
     check_exclusion()
+
+
+def test_slide_has_longer_default_but_preserves_explicit_duration(temp_data_dir):
+    data_storage.save_notes_animation_strategy('slide')
+    assert data_storage.get_notes_fade_in_duration_ms() == 360
+    data_storage.save_notes_fade_in_duration_ms(120)
+    assert data_storage.get_notes_fade_in_duration_ms() == 120
+    data_storage.save_notes_fade_in_duration_ms(0)
+    assert data_storage.get_notes_fade_in_duration_ms() == 0
