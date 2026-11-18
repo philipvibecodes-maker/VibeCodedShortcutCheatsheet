@@ -929,7 +929,7 @@ class NotesWindow(QMainWindow):
         if duration and self._animation_strategy == "palette":
             # Keep the search and results recognizable on the first frame,
             # rather than briefly presenting an empty dark rectangle.
-            self._fade_overlay.setProgress(0.35)
+            self._fade_overlay.setProgress(0.85)
         self._fade_overlay.setVisible(bool(duration) and self._animation_strategy in ("fade", "palette"))
         self._fade_overlay.raise_()
         display = self.screen() or QApplication.primaryScreen()
@@ -948,7 +948,7 @@ class NotesWindow(QMainWindow):
         if self._animation_strategy == "palette":
             # IDE palettes emerge close to their destination, without a long
             # offscreen journey or an opacity request to the compositor.
-            self._slide_start_y = self._slide_target.y() - 18
+            self._slide_start_y = self._slide_target.y() - 12
         if duration and self._animation_strategy in ("slide", "palette"):
             self.move(self._slide_target.x(), self._slide_start_y)
         else:
@@ -964,8 +964,15 @@ class NotesWindow(QMainWindow):
             surface = self._slide_surface or self
             surface.move(self._slide_target.x(), y)
         if self._animation_strategy in ("fade", "palette"):
-            reveal = 0.35 + 0.65 * progress if self._animation_strategy == "palette" else progress
+            # Readable immediately; finish the small brightness change before
+            # the last few pixels settle. Avoid a prolonged "disabled" look.
+            reveal = progress
+            if self._animation_strategy == "palette":
+                phase = min(1.0, progress / 0.4)
+                reveal = 1.0 - 0.15 * (1.0 - phase) ** 2
             self._fade_overlay.setProgress(reveal)
+            if self._animation_strategy == "palette" and reveal >= 1.0:
+                self._fade_overlay.hide()
         self._update_backdrop()
 
     def _finish_opening(self, show_destination=True):

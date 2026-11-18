@@ -458,13 +458,13 @@ def test_command_palette_combines_short_descent_and_reveal(qtbot, temp_data_dir)
     surface = window._slide_surface
     native_id = int(surface.winId())
     target = window._slide_target
-    assert surface.y() == target.y() - 18
+    assert surface.y() == target.y() - 12
     assert window._fade_overlay.isVisible()
-    assert window._fade_overlay.progress == 0.35
+    assert window._fade_overlay.progress == 0.85
     assert window.windowOpacity() == 1
     window._fade_in.setCurrentTime(90)
-    assert surface.y() == round(target.y() - 18 + 18 * 0.875)
-    assert window._fade_overlay.progress == pytest.approx(0.35 + 0.65 * 0.875)
+    assert surface.y() == round(target.y() - 12 + 12 * 0.875)
+    assert window._fade_overlay.progress == pytest.approx(1.0)
     qtbot.keyClicks(window.search_edit, 'command')
     window._fade_in.setCurrentTime(180)
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
@@ -485,3 +485,25 @@ def test_command_palette_can_disable_animation(qtbot, temp_data_dir):
     assert window._slide_surface is None
     assert window._fade_in.state() == QTimeLine.State.NotRunning
     assert not window._fade_overlay.isVisible()
+
+
+def test_palette_is_readable_early_and_finishes_reveal_before_motion(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy('palette')
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    data_storage.save_notes_animation_startup_speed(1)
+    window = _make_window(qtbot)
+    window.show()
+    surface = window._slide_surface
+    native_id = int(surface.winId())
+    assert window._fade_overlay.progress == 0.85
+    window._fade_in.setCurrentTime(200)
+    assert window._fade_overlay.progress == pytest.approx(0.9625)
+    window._fade_in.setCurrentTime(400)
+    assert window._fade_overlay.progress == 1
+    assert not window._fade_overlay.isVisible()
+    assert surface.y() < window._slide_target.y()
+    assert window._backdrop.strength < window.backdrop_slider.value() / 100
+    window._fade_in.setCurrentTime(1000)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert surface.pos() == window._slide_target
+    assert int(surface.winId()) == native_id
