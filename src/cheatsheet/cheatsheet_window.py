@@ -85,6 +85,7 @@ class CheatsheetWindow(QMainWindow):
         self.setStyleSheet(DARK_THEME)
         self._current_app = None
         self._current_title = None
+        self._displayed_shortcuts = None
         self._corner_v = "top"
         self._corner_h = "right"
         self._initial_move_done = False
@@ -194,16 +195,20 @@ class CheatsheetWindow(QMainWindow):
         if not data:
             return
 
-        self._main_layout.removeWidget(self.grid_widget)
-        self.grid_widget.setParent(None)
+        # Terminal titles can change on every command/output update. Resolve
+        # title-specific profiles as usual, but leave the layout alone when
+        # the visible rows have not changed.
+        shortcuts = tuple((row["keys"], row["description"]) for row in data["shortcuts"])
+        if shortcuts == self._displayed_shortcuts:
+            return
 
-        self.grid_widget = QWidget()
+        old_grid = self.grid_widget
+        self.grid_widget = QWidget(self.central)
         self.grid_layout = QGridLayout(self.grid_widget)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
         vertical_spacing = int(self._font_size * 0.2)
         self.grid_layout.setVerticalSpacing(vertical_spacing)
         self.grid_layout.setHorizontalSpacing(0)
-        self._main_layout.addWidget(self.grid_widget)
 
         grid_row = 0
         vertical_padding = int(self._font_size * 0.15)
@@ -229,6 +234,13 @@ class CheatsheetWindow(QMainWindow):
                 self.grid_layout.addWidget(separator, grid_row, 0, 1, 2)
                 grid_row += 1
 
+        # Swap only once the replacement is complete. Keep the old grid a
+        # child until Qt deletes it instead of reparenting it into a window.
+        self._main_layout.replaceWidget(old_grid, self.grid_widget)
+        old_grid.hide()
+        old_grid.deleteLater()
+        self.grid_widget.show()
+        self._displayed_shortcuts = shortcuts
         self._main_layout.activate()
         self.setFixedSize(self.sizeHint())
         self.setMinimumSize(0, 0)

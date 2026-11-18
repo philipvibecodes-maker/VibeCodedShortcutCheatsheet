@@ -104,6 +104,53 @@ def test_poll_reopens_when_focused_app_has_shortcuts(cheatsheet, focused_window)
     assert not _settings_visible(cheatsheet)
 
 
+def test_terminal_title_updates_preserve_shortcut_widgets(cheatsheet, focused_window):
+    """Changing command/title text must not tear down unchanged shortcuts."""
+    focused_window["wm_class"] = APP_WITH_SHORTCUTS
+    cheatsheet._on_poll()
+    grid = cheatsheet.grid_widget
+    geometry = cheatsheet.close_button.geometry()
+    window_size = cheatsheet.size()
+
+    for title in ("terminal: running command", "terminal: output", "terminal: prompt"):
+        focused_window["title"] = title
+        cheatsheet._on_poll()
+        assert cheatsheet.grid_widget is grid
+        assert cheatsheet.close_button.geometry() == geometry
+        assert cheatsheet.size() == window_size
+        assert cheatsheet._current_title == title
+
+
+def test_title_profile_change_replaces_grid_without_detaching(cheatsheet, focused_window):
+    """Title-dependent profiles still refresh, without creating top-level grids."""
+    data_storage.save_tab_shortcuts(APP_WITH_SHORTCUTS, "editor", [
+        {"keys": "Ctrl+S", "description": "Save document"},
+    ])
+    focused_window["wm_class"] = APP_WITH_SHORTCUTS
+    cheatsheet._on_poll()
+    old_grid = cheatsheet.grid_widget
+    focused_window["title"] = "terminal: editor"
+    cheatsheet._on_poll()
+
+    assert cheatsheet.grid_widget is not old_grid
+    assert old_grid.parent() is cheatsheet.central
+    assert old_grid.isHidden()
+    assert cheatsheet.grid_layout.itemAtPosition(0, 0).widget().text() == "Save document"
+
+
+def test_editing_displayed_shortcuts_refreshes_grid(cheatsheet, focused_window):
+    focused_window["wm_class"] = APP_WITH_SHORTCUTS
+    cheatsheet._on_poll()
+    old_grid = cheatsheet.grid_widget
+    data_storage.save_app_shortcuts(APP_WITH_SHORTCUTS, [
+        {"keys": "Ctrl+W", "description": "Close tab"},
+    ])
+    cheatsheet._on_shortcuts_saved(APP_WITH_SHORTCUTS)
+
+    assert cheatsheet.grid_widget is not old_grid
+    assert cheatsheet.grid_layout.itemAtPosition(0, 0).widget().text() == "Close tab"
+
+
 def test_second_launch_without_shortcuts_opens_add_shortcuts(cheatsheet):
     """Second launch while hidden correctly opens settings for the unknown app."""
     cheatsheet.handle_second_instance(APP_WITHOUT_SHORTCUTS)
