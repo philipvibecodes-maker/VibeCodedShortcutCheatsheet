@@ -136,6 +136,15 @@ def save_notes_font_size(size: int) -> None:
     _save_config_value("notes_font_size", size)
 
 
+def get_notes_fade_in_duration_ms() -> int:
+    """Return the notes fade duration (0 disables it), defaulting to 120 ms."""
+    duration = _get_config().get("notes_fade_in_duration_ms", 120)
+    # Reject malformed values and bound the duration to keep opening responsive.
+    if type(duration) is not int or not 0 <= duration <= 1000:
+        return 120
+    return duration
+
+
 def get_notes_last_topic() -> Optional[str]:
     """Get the topic the notes window last showed, or None if never set."""
     return _get_config().get("notes_last_topic")

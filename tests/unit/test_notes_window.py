@@ -3,8 +3,10 @@
 Runs offscreen with data storage redirected to a tmp dir.
 """
 
+import json
+
 import pytest
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QAbstractAnimation, Qt
 
 from src import data_storage
 from src.notes.notes_window import NotesWindow
@@ -96,3 +98,55 @@ def test_keyboard_topic_selection_exits_search(qtbot, temp_data_dir):
     assert window._current_topic() == "beta"
     assert window.search_edit.text() == ""
     assert data_storage.get_notes_last_search() == ""
+
+
+@pytest.mark.parametrize("value, expected", [
+    (0, 0), (240, 240), (1000, 1000),
+    (-1, 120), (1001, 120), ("fast", 120), (None, 120),
+    (True, 120), (1.5, 120),
+])
+def test_fade_duration_config(temp_data_dir, value, expected):
+    (temp_data_dir / "config.json").write_text(json.dumps({
+        "notes_fade_in_duration_ms": value,
+    }))
+    assert data_storage.get_notes_fade_in_duration_ms() == expected
+
+
+def test_fade_in_progresses_and_finishes(qtbot, temp_data_dir):
+    window = _make_window(qtbot)
+    window.show()
+    assert window._fade_in.duration() == 120
+    assert window.windowOpacity() == 0.0
+    qtbot.waitUntil(lambda: 0.0 < window.windowOpacity() < 1.0)
+    # The window remains interactive while fading.
+    qtbot.keyClicks(window.search_edit, "query")
+    assert window.search_edit.text() == "query"
+    qtbot.waitUntil(lambda: window._fade_in.state() == QAbstractAnimation.State.Stopped)
+    assert window.windowOpacity() == 1.0
+
+
+@pytest.mark.parametrize("hide_method", ["hide", "close"])
+def test_interrupted_fade_stops_and_reopens(qtbot, temp_data_dir, hide_method):
+    window = _make_window(qtbot)
+    window.show()
+    getattr(window, hide_method)()
+    assert window._fade_in.state() == QAbstractAnimation.State.Stopped
+    assert window.windowOpacity() == 1.0
+    window.show()
+    assert window.windowOpacity() == 0.0
+    assert window._fade_in.state() == QAbstractAnimation.State.Running
+    qtbot.waitUntil(lambda: window._fade_in.state() == QAbstractAnimation.State.Stopped)
+    assert window.windowOpacity() == 1.0
+
+
+def test_fade_config_is_reloaded_and_can_disable_animation(qtbot, temp_data_dir):
+    config = temp_data_dir / "config.json"
+    config.write_text('{"notes_fade_in_duration_ms": 250}')
+    window = _make_window(qtbot)
+    window.show()
+    assert window._fade_in.duration() == 250
+    window.hide()
+    config.write_text('{"notes_fade_in_duration_ms": 0}')
+    window.show()
+    assert window.windowOpacity() == 1.0
+    assert window._fade_in.state() == QAbstractAnimation.State.Stopped

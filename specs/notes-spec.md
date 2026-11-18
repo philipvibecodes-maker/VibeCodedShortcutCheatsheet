@@ -3,6 +3,7 @@
 The application has a notes window, separate from the cheatsheet window, that will
 - open when the user presses the n key while the cheatsheet is focused, or toggle open/closed on the global Ctrl+Shift+\ hotkey (GNOME custom keybinding running `main.py --toggle-notes` on Linux, RegisterHotKey on Windows; both send a `toggle_notes` message over the local socket). Opening notes must not also show the cheatsheet (or the add-shortcuts settings window) — a `--toggle-notes` launch keeps the cheatsheet hidden.
 - be large and centered on the screen.
+- fade in using native window opacity (default 120 ms), while continuing to bypass GNOME's opening animation. Configure `notes_fade_in_duration_ms` in `data/config.json` (integer 0–1000; 0 disables the fade, invalid values use the default). Read the setting on each opening, stop the fade when hidden, and keep keyboard input available throughout.
 - reopen on the topic that was selected when it was last open (persisted to `config.json` as `notes_last_topic`, falling back to the first topic when it no longer exists).
 - let the user record key/value pairs under user-defined topics (e.g. a topic `git` with a row "compare to origin main" and multi-line text as its value).
 - show recorded app shortcuts as read-only topics named `shortcuts/<app_name>` (key = description, value = keys).

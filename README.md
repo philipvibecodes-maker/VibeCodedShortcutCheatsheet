@@ -104,6 +104,7 @@ shortcut-cheatsheet-vibed/
 ## Configuration
 
 - **Font size**: Stored in `data/config.json` (default: 12pt)
+- **Notes fade-in**: Set `"notes_fade_in_duration_ms": 120` in `data/config.json` to control the lightweight opening fade (milliseconds, integer from 0 to 1000; default: 120). Use `0` to disable it. Changes take effect the next time notes opens. Native GNOME opening animations remain bypassed.
 - **Shortcuts**: Stored in `data/<app_name>.json`. The app name is the `wm_class` on Linux (e.g. `brave-browser`) and the executable name on Windows (e.g. `notepad.exe`, `Code.exe`).
 - **Default shortcuts**: Stored in `data/default.json`
 

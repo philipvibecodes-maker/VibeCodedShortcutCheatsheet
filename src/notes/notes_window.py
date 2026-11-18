@@ -1,6 +1,6 @@
 """Large centered window for recording and searching key/value notes under topics."""
 
-from PyQt6.QtCore import QEvent, Qt, QTimer
+from PyQt6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, Qt, QTimer
 from PyQt6.QtGui import QFont, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
@@ -31,6 +31,7 @@ from src.data_storage import (
     delete_topic,
     delete_topic_entry,
     get_all_shortcuts,
+    get_notes_fade_in_duration_ms,
     get_notes_font_size,
     get_notes_last_search,
     get_notes_last_topic,
@@ -213,6 +214,11 @@ class NotesWindow(QMainWindow):
         # immediately; this X11 hint also works under XWayland and is ignored
         # on other platforms. Keep the normal Qt title bar and window controls.
         self.setAttribute(Qt.WidgetAttribute.WA_X11NetWmWindowTypeUtility)
+        # Animate only the native window opacity; no widget effects or repaints.
+        self._fade_in = QPropertyAnimation(self, b"windowOpacity", self)
+        self._fade_in.setStartValue(0.0)
+        self._fade_in.setEndValue(1.0)
+        self._fade_in.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.setStyleSheet(DARK_THEME)
         self._font_size = get_notes_font_size()
 
@@ -552,6 +558,13 @@ class NotesWindow(QMainWindow):
     # --- window behavior --------------------------------------------------
 
     def showEvent(self, event):
+        if event.spontaneous():
+            super().showEvent(event)
+            return
+        self._fade_in.stop()
+        duration = get_notes_fade_in_duration_ms()
+        # Set opacity before mapping to avoid a fully opaque first frame.
+        self.setWindowOpacity(0.0 if duration else 1.0)
         super().showEvent(event)
         screen = QApplication.primaryScreen().availableGeometry()
         self.resize(int(screen.width() * 0.7), int(screen.height() * 0.7))
@@ -560,6 +573,15 @@ class NotesWindow(QMainWindow):
             screen.y() + (screen.height() - self.height()) // 2,
         )
         self.search_edit.setFocus()
+        if duration:
+            self._fade_in.setDuration(duration)
+            self._fade_in.start()
+
+    def hideEvent(self, event):
+        # Closing/toggling during the fade must leave no running animation.
+        self._fade_in.stop()
+        self.setWindowOpacity(1.0)
+        super().hideEvent(event)
 
     def changeEvent(self, event):
         super().changeEvent(event)
