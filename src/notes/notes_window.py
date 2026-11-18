@@ -3,7 +3,7 @@
 from functools import partial
 
 from PyQt6.QtCore import QEasingCurve, QEvent, QPoint, QTimeLine, Qt, QTimer
-from PyQt6.QtGui import QActionGroup, QColor, QFont, QKeySequence, QPainter, QShortcut
+from PyQt6.QtGui import QActionGroup, QColor, QFont, QKeySequence, QPalette, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -150,6 +150,7 @@ class _FadeOverlay(QWidget):
         super().__init__(parent)
         self.progress = 1.0
         self._cover_color = QColor(43, 43, 43)
+        self.setAutoFillBackground(True)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.hide()
@@ -157,12 +158,10 @@ class _FadeOverlay(QWidget):
     def setProgress(self, progress):
         self.progress = progress
         self._cover_color.setAlpha(round(255 * (1 - progress)))
+        palette = self.palette()
+        palette.setColor(QPalette.ColorRole.Window, self._cover_color)
+        self.setPalette(palette)
         self.update()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.fillRect(event.rect(), self._cover_color)
-        painter.end()
 
 
 class EntryDialog(QDialog):
@@ -282,6 +281,8 @@ class NotesWindow(QMainWindow):
         easing.setCustomType(_fade_easing)
         self._fade_in.setEasingCurve(easing)
         self._animation_strategy = get_notes_animation_strategy()
+        self._slide_surface = None
+        self._slide_handoff = False
         self._slide_target = None
         self._fade_in.valueChanged.connect(self._animate_opening)
         self._fade_in.finished.connect(self._finish_opening)
@@ -695,10 +696,41 @@ class NotesWindow(QMainWindow):
         self.fade_duration_slider.blockSignals(False)
         self._update_fade_label(duration)
 
+    def show(self):
+        if (get_notes_animation_strategy() == "slide"
+                and get_notes_fade_in_duration_ms() and not self.isVisible()):
+            self._prepare_opening()
+            # An override-redirect surface is not repositioned by GNOME.
+            # Host the actual widgets, so typing and editing remain live.
+            surface = QWidget(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
+                              | Qt.WindowType.WindowStaysOnTopHint
+                              | Qt.WindowType.X11BypassWindowManagerHint)
+            surface.setWindowTitle(self.windowTitle())
+            surface.resize(self.size())
+            surface.move(self._slide_target.x(), self._slide_start_y)
+            self._slide_surface = surface
+            self._normal_window_flags = self.windowFlags()
+            self.setParent(surface, Qt.WindowType.Widget)
+            self.move(0, 0)
+            super().show()
+            surface.show()
+            surface.activateWindow()
+            self.search_edit.setFocus()
+            self._fade_in.start()
+        else:
+            super().show()
+
     def showEvent(self, event):
-        if event.spontaneous():
+        if event.spontaneous() or self._slide_surface is not None or self._slide_handoff:
             super().showEvent(event)
             return
+        duration = self._prepare_opening()
+        super().showEvent(event)
+        self.search_edit.setFocus()
+        if duration:
+            self._fade_in.start()
+
+    def _prepare_opening(self):
         self._fade_in.stop()
         duration = get_notes_fade_in_duration_ms()
         speed = get_notes_animation_startup_speed()
@@ -730,20 +762,32 @@ class NotesWindow(QMainWindow):
         else:
             self.move(self._slide_target)
         self._fade_overlay.setGeometry(self.rect())
-        super().showEvent(event)
-        self.search_edit.setFocus()
-        if duration:
-            self._fade_in.start()
+        return duration
 
     def _animate_opening(self, progress):
         if self._animation_strategy == "slide" and self._slide_target is not None:
             y = round(self._slide_start_y +
                       (self._slide_target.y() - self._slide_start_y) * progress)
-            self.move(self._slide_target.x(), y)
+            surface = self._slide_surface or self
+            surface.move(self._slide_target.x(), y)
         else:
             self._fade_overlay.setProgress(progress)
 
-    def _finish_opening(self):
+    def _finish_opening(self, show_destination=True):
+        if self._slide_surface is not None:
+            surface = self._slide_surface
+            self._slide_handoff = True
+            self.setParent(None, self._normal_window_flags)
+            self.move(self._slide_target)
+            self._slide_surface = None
+            if show_destination:
+                super().show()
+                self.raise_()
+                self.activateWindow()
+                self.search_edit.setFocus()
+            surface.hide()
+            surface.deleteLater()
+            self._slide_handoff = False
         self._fade_overlay.hide()
         if self._animation_strategy == "slide" and self._slide_target is not None:
             self.move(self._slide_target)
@@ -753,10 +797,19 @@ class NotesWindow(QMainWindow):
         if hasattr(self, "_fade_overlay"):
             self._fade_overlay.setGeometry(self.rect())
 
+    def closeEvent(self, event):
+        if self._slide_surface is not None:
+            self._fade_in.stop()
+            self._finish_opening(show_destination=False)
+        super().closeEvent(event)
+
     def hideEvent(self, event):
+        if self._slide_handoff:
+            super().hideEvent(event)
+            return
         # Closing/toggling during the fade must leave no running animation.
         self._fade_in.stop()
-        self._finish_opening()
+        self._finish_opening(show_destination=False)
         self._fade_overlay.hide()
         self._fade_overlay.setProgress(1.0)
         super().hideEvent(event)

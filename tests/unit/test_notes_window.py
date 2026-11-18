@@ -281,11 +281,11 @@ def test_slide_strategy_moves_down_and_persists(qtbot, temp_data_dir):
     data_storage.save_notes_fade_in_duration_ms(1000)
     window.show()
     target = window._slide_target
-    assert window.y() < target.y()
+    assert window._slide_surface.y() < target.y()
     assert not window._fade_overlay.isVisible()
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
     window._fade_in.setCurrentTime(500)
-    assert window.y() == round(window._slide_start_y + (target.y() - window._slide_start_y) * 0.875)
+    assert window._slide_surface.y() == round(window._slide_start_y + (target.y() - window._slide_start_y) * 0.875)
     window._fade_in.setCurrentTime(1000)
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
     assert window.pos() == target
@@ -321,6 +321,31 @@ def test_slide_starts_entirely_above_physical_screen(qtbot, temp_data_dir):
     data_storage.save_notes_fade_in_duration_ms(1000)
     window = _make_window(qtbot)
     window.show()
-    assert window.frameGeometry().bottom() < window.screen().geometry().top()
+    assert window._slide_surface.frameGeometry().bottom() < window.screen().geometry().top()
     assert window._slide_target.y() >= window.screen().availableGeometry().top()
     window.close()
+
+
+@pytest.mark.parametrize("cancel", ["hide", "close"])
+def test_slide_surface_bypasses_window_manager_and_cleans_up(qtbot, temp_data_dir, cancel):
+    data_storage.save_notes_animation_strategy("slide")
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window = _make_window(qtbot)
+    window.show()
+    surface = window._slide_surface
+    assert surface.windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
+    assert window.parentWidget() is surface
+    qtbot.keyClicks(window.search_edit, "live input")
+    assert window.search_edit.text() == "live input"
+    getattr(window, cancel)()
+    assert window._slide_surface is None
+    assert window.parentWidget() is None
+    assert not window.isVisible()
+    assert not surface.isVisible()
+    window.show()
+    window._fade_in.setCurrentTime(1000)
+    qtbot.waitUntil(lambda: window._slide_surface is None)
+    assert window.isVisible()
+    assert window.parentWidget() is None
+    assert not window.windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
+    assert window.search_edit.text() == "live input"
