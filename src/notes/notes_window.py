@@ -1,6 +1,6 @@
 """Large centered window for recording and searching key/value notes under topics."""
 
-from PyQt6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, Qt, QTimer
+from PyQt6.QtCore import QEasingCurve, QEvent, QTimeLine, Qt, QTimer
 from PyQt6.QtGui import QFont, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
@@ -117,6 +117,11 @@ DARK_THEME = """
 SHORTCUT_TOPIC_PREFIX = "shortcuts/"
 
 
+def _fade_easing(progress):
+    """Smoothstep: continuous opacity and velocity, with gentle endpoints."""
+    return progress * progress * (3.0 - 2.0 * progress)
+
+
 class EntryDialog(QDialog):
     """Dialog for recording a key -> multi-line text entry."""
 
@@ -225,10 +230,15 @@ class NotesWindow(QMainWindow):
         # on other platforms. Keep the normal Qt title bar and window controls.
         self.setAttribute(Qt.WidgetAttribute.WA_X11NetWmWindowTypeUtility)
         # Animate only the native window opacity; no widget effects or repaints.
-        self._fade_in = QPropertyAnimation(self, b"windowOpacity", self)
-        self._fade_in.setStartValue(0.0)
-        self._fade_in.setEndValue(1.0)
-        self._fade_in.setEasingCurve(QEasingCurve.Type.Linear)
+        self._fade_in = QTimeLine(120, self)
+        # Use a finer cadence than Qt's shared property-animation driver.
+        # QTimeLine uses elapsed time, so delayed ticks don't extend the fade.
+        self._fade_in.setUpdateInterval(8)
+        easing = QEasingCurve()
+        easing.setCustomType(_fade_easing)
+        self._fade_in.setEasingCurve(easing)
+        self._fade_in.valueChanged.connect(self.setWindowOpacity)
+        self._fade_in.finished.connect(lambda: self.setWindowOpacity(1.0))
         self._fade_pending = False
         self._fade_start_timer = QTimer(self)
         self._fade_start_timer.setSingleShot(True)
@@ -626,7 +636,7 @@ class NotesWindow(QMainWindow):
         self._fade_start_timer.stop()
         duration = get_notes_fade_in_duration_ms()
         self._fade_pending = bool(duration)
-        self._fade_in.setDuration(duration)
+        self._fade_in.setDuration(max(1, duration))
         self._sync_fade_controls(duration)
         # Set opacity before mapping to avoid a fully opaque first frame.
         self.setWindowOpacity(0.0 if duration else 1.0)

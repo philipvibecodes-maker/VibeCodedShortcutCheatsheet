@@ -6,7 +6,7 @@ Runs offscreen with data storage redirected to a tmp dir.
 import json
 
 import pytest
-from PyQt6.QtCore import QAbstractAnimation, QEvent, Qt
+from PyQt6.QtCore import QEvent, QTimeLine, Qt
 
 from src import data_storage
 from src.notes.notes_window import NotesWindow
@@ -121,7 +121,7 @@ def test_fade_in_progresses_and_finishes(qtbot, temp_data_dir):
     # The window remains interactive while fading.
     qtbot.keyClicks(window.search_edit, "query")
     assert window.search_edit.text() == "query"
-    qtbot.waitUntil(lambda: window._fade_in.state() == QAbstractAnimation.State.Stopped)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
     assert window.windowOpacity() == 1.0
 
 
@@ -129,18 +129,18 @@ def test_fade_in_progresses_and_finishes(qtbot, temp_data_dir):
 def test_interrupted_fade_stops_and_reopens(qtbot, temp_data_dir, hide_method):
     window = _make_window(qtbot)
     window.show()
-    qtbot.waitUntil(lambda: window._fade_in.state() == QAbstractAnimation.State.Running)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
     getattr(window, hide_method)()
-    assert window._fade_in.state() == QAbstractAnimation.State.Stopped
+    assert window._fade_in.state() == QTimeLine.State.NotRunning
     assert window.windowOpacity() == 1.0
     window.show()
     assert window.windowOpacity() == 0.0
-    qtbot.waitUntil(lambda: window._fade_in.state() == QAbstractAnimation.State.Running)
-    qtbot.waitUntil(lambda: window._fade_in.state() == QAbstractAnimation.State.Stopped)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
     assert window.windowOpacity() == 1.0
 
 
-def test_fade_waits_for_exposure_then_uses_full_linear_duration(
+def test_fade_waits_for_exposure_then_uses_full_smooth_duration(
         qtbot, temp_data_dir, monkeypatch):
     data_storage.save_notes_fade_in_duration_ms(1000)
     window = _make_window(qtbot)
@@ -151,16 +151,17 @@ def test_fade_waits_for_exposure_then_uses_full_linear_duration(
     window.show()
     qtbot.wait(150)
     assert window.windowOpacity() == 0.0
-    assert window._fade_in.state() == QAbstractAnimation.State.Stopped
+    assert window._fade_in.state() == QTimeLine.State.NotRunning
     assert window._fade_in.currentTime() == 0
 
     exposed = True
     window.eventFilter(handle, QEvent(QEvent.Type.Expose))
-    qtbot.waitUntil(lambda: window._fade_in.state() == QAbstractAnimation.State.Running)
-    for elapsed in (0, 250, 500, 750, 1000):
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
+    for elapsed, expected in ((0, 0), (250, 0.15625), (500, 0.5),
+                              (750, 0.84375), (1000, 1)):
         window._fade_in.setCurrentTime(elapsed)
-        assert window.windowOpacity() == pytest.approx(elapsed / 1000, abs=0.005)
-    assert window._fade_in.state() == QAbstractAnimation.State.Stopped
+        assert window.windowOpacity() == pytest.approx(expected, abs=0.005)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
 
 
 def test_hiding_before_exposure_cancels_pending_fade(qtbot, temp_data_dir):
@@ -170,7 +171,7 @@ def test_hiding_before_exposure_cancels_pending_fade(qtbot, temp_data_dir):
     qtbot.wait(50)
     assert not window._fade_pending
     assert not window._fade_start_timer.isActive()
-    assert window._fade_in.state() == QAbstractAnimation.State.Stopped
+    assert window._fade_in.state() == QTimeLine.State.NotRunning
     assert window.windowOpacity() == 1.0
 
 
@@ -184,7 +185,7 @@ def test_fade_config_is_reloaded_and_can_disable_animation(qtbot, temp_data_dir)
     config.write_text('{"notes_fade_in_duration_ms": 0}')
     window.show()
     assert window.windowOpacity() == 1.0
-    assert window._fade_in.state() == QAbstractAnimation.State.Stopped
+    assert window._fade_in.state() == QTimeLine.State.NotRunning
     assert window.fade_duration_slider.value() == 0
     assert "Off" in window.fade_duration_label.text()
 
