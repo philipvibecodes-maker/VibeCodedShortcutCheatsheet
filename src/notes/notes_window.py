@@ -1,6 +1,8 @@
 """Large centered window for recording and searching key/value notes under topics."""
 
 from functools import partial
+import subprocess
+import sys
 
 from PyQt6.QtCore import QEasingCurve, QEvent, QPoint, QTimeLine, Qt, QTimer
 from PyQt6.QtGui import QActionGroup, QColor, QFont, QKeySequence, QPainter, QRegion, QShortcut
@@ -17,6 +19,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMenuBar,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -50,6 +53,8 @@ from src.data_storage import (
     get_notes_last_search,
     get_notes_last_topic,
     get_topics,
+    get_notes_always_show_topics,
+    save_notes_always_show_topics,
     save_notes_fade_in_duration_ms,
     save_notes_animation_strategy,
     save_notes_animation_startup_speed,
@@ -69,7 +74,8 @@ DARK_THEME = """
     QLabel {
         color: #e0e0e0;
     }
-    QMenuBar, QMenu {
+    QMenuBar,
+    QMenu, QMenu {
         background-color: #2b2b2b;
         color: #e0e0e0;
     }
@@ -308,42 +314,69 @@ class EntryDialog(QDialog):
         return self.key_edit.text().strip(), self.value_edit.toPlainText()
 
 
-class MultiLineEditDelegate(QStyledItemDelegate):
-    """In-place multi-line editor for the value column (Ctrl+Return commits)."""
+class NotesEditDelegate(QStyledItemDelegate):
+    """Compact display with explicit, focus-safe key/value editing."""
+
+    def __init__(self, table, notes, multiline=False):
+        super().__init__(table)
+        self.notes = notes
+        self.multiline = multiline
+
+    def displayText(self, value, locale):
+        text = str(value).replace("\n", "  ·  ")
+        return text[:100] + ("…" if len(text) > 100 else "")
 
     def createEditor(self, parent, option, index):
-        editor = QPlainTextEdit(parent)
-        editor.installEventFilter(self)
+        editor = QPlainTextEdit(parent) if self.multiline else QLineEdit(parent)
+        self.notes._active_editor = (self, editor, index)
+        self.notes.search_edit.setEnabled(False)
+        self.notes.topic_list.setEnabled(False)
         return editor
 
     def updateEditorGeometry(self, editor, option, index):
-        # Rows are ResizeToContents (~1 line for short values); stretch the
-        # editor downward over the rows below so multi-line editing is visible.
         rect = option.rect
-        wanted = editor.fontMetrics().lineSpacing() * 4 + 12
-        if rect.height() < wanted:
-            table = self.parent()
-            bottom = table.viewport().rect().bottom() if table else rect.bottom()
-            rect.setBottom(min(rect.top() + wanted, bottom))
+        if self.multiline:
+            rect.setHeight(min(130, self.parent().viewport().height() - rect.top()))
         editor.setGeometry(rect)
 
-    def eventFilter(self, obj, event):
-        if (
-            isinstance(obj, QPlainTextEdit)
-            and event.type() == QEvent.Type.KeyPress
-            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
-            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
-        ):
-            self.commitData.emit(obj)
-            self.closeEditor.emit(obj)
-            return True
-        return super().eventFilter(obj, event)
-
     def setEditorData(self, editor, index):
-        editor.setPlainText(str(index.data() or ""))
+        if self.multiline:
+            editor.setPlainText(str(index.data() or ""))
+        else:
+            editor.setText(str(index.data() or ""))
+
+    def valid(self, editor):
+        if not self.multiline and not editor.text().strip():
+            self.notes.feedback.setText("A note key cannot be empty.")
+            editor.setFocus()
+            return False
+        return True
 
     def setModelData(self, editor, model, index):
-        model.setData(index, editor.toPlainText())
+        if self.valid(editor):
+            model.setData(index, editor.toPlainText() if self.multiline else editor.text().strip())
+
+    def destroyEditor(self, editor, index):
+        if self.notes._active_editor and self.notes._active_editor[1] is editor:
+            self.notes._active_editor = None
+        if self.notes._active_editor is None:
+            self.notes.search_edit.setEnabled(True)
+            self.notes.topic_list.setEnabled(True)
+        super().destroyEditor(editor, index)
+
+    def eventFilter(self, editor, event):
+        if event.type() == QEvent.Type.FocusOut:
+            # A temporary app switch must not commit or discard an edit.
+            return True
+        if event.type() == QEvent.Type.KeyPress:
+            if event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab):
+                return not self.valid(editor) or super().eventFilter(editor, event)
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if not self.multiline or event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                    self.notes._commit_editor()
+                    return True
+                return False
+        return super().eventFilter(editor, event)
 
 
 class NotesWindow(QMainWindow):
@@ -397,6 +430,9 @@ class NotesWindow(QMainWindow):
         self._fade_in.finished.connect(self._finish_opening)
         self.setStyleSheet(DARK_THEME)
         self._font_size = get_notes_font_size()
+        self._active_editor = None
+        self._session_size = None
+        self._preparing_opening = False
 
         chrome = QWidget(self)
         chrome_layout = QVBoxLayout(chrome)
@@ -512,7 +548,20 @@ class NotesWindow(QMainWindow):
         self.search_edit.setPlaceholderText("Search all topics and shortcuts…")
         self.search_edit.textChanged.connect(self._refresh_entries)
         self.search_edit.textChanged.connect(save_notes_last_search)
-        layout.addWidget(self.search_edit)
+        self.search_edit.setAccessibleName("Search all topics and shortcuts")
+        self.search_edit.setMinimumHeight(42)
+        search_row = QHBoxLayout()
+        self.topics_btn = QPushButton("Topics")
+        self.topics_btn.setCheckable(True)
+        self.topics_btn.toggled.connect(self._toggle_topics)
+        search_row.addWidget(self.topics_btn)
+        search_row.addWidget(self.search_edit, 1)
+        layout.addLayout(search_row)
+        layout_menu = notes_menu.addMenu("&Layout")
+        self.always_topics_action = layout_menu.addAction("Always show topics")
+        self.always_topics_action.setCheckable(True)
+        self.always_topics_action.setChecked(get_notes_always_show_topics())
+        self.always_topics_action.toggled.connect(self._set_topic_layout)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.topic_list = QListWidget()
@@ -522,19 +571,33 @@ class NotesWindow(QMainWindow):
         splitter.addWidget(self.topic_list)
 
         self.table = QTableWidget()
-        self._multiline_delegate = MultiLineEditDelegate(self.table)
+        self._multiline_delegate = NotesEditDelegate(self.table, self, multiline=True)
+        self._key_delegate = NotesEditDelegate(self.table, self)
         self.table.setEditTriggers(
-            QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.EditKeyPressed
+            QTableWidget.EditTrigger.NoEditTriggers
         )
         self.table.itemChanged.connect(self._on_item_changed)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setWordWrap(True)
+        self.table.setWordWrap(False)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.table.currentCellChanged.connect(lambda *_: self._update_preview())
 
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        splitter.addWidget(self.table)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 3)
+        self.result_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.result_splitter.addWidget(self.table)
+        self.preview = QPlainTextEdit()
+        self.preview.setReadOnly(True)
+        self.preview.setAccessibleName("Full note value")
+        self.preview.setPlaceholderText("Select a note to read its full value.")
+        self.result_splitter.addWidget(self.preview)
+        self.result_splitter.setSizes([480, 480])
+        splitter.addWidget(self.result_splitter)
+        splitter.setSizes([180, 820])
+        splitter.setStretchFactor(1, 1)
+        self.topic_list.setVisible(get_notes_always_show_topics())
+        self.topics_btn.setChecked(get_notes_always_show_topics())
+        self.topics_btn.setVisible(not get_notes_always_show_topics())
         layout.addWidget(splitter, 1)
 
         buttons = QHBoxLayout()
@@ -559,21 +622,53 @@ class NotesWindow(QMainWindow):
         self.delete_entry_btn = QPushButton("De&lete entry")
         self.delete_entry_btn.clicked.connect(self._delete_entry)
         buttons.addWidget(self.delete_entry_btn)
+        self.edit_value_btn = QPushButton("Edit value")
+        self.edit_value_btn.clicked.connect(self._edit_value)
+        buttons.addWidget(self.edit_value_btn)
+        self.edit_entry_btn.setText("Edit key")
+        manage = QToolButton()
+        manage.setText("Manage")
+        manage.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        manage_menu = QMenu(manage)
+        for button in (self.new_topic_btn, self.delete_topic_btn, self.new_entry_btn, self.delete_entry_btn):
+            button.hide()
+            action = manage_menu.addAction(button.text())
+            action.triggered.connect(button.click)
+            # Keep menu availability synchronized with existing action guards.
+            manage_menu.aboutToShow.connect(lambda b=button, a=action: a.setEnabled(b.isEnabled()))
+        manage.setMenu(manage_menu)
+        buttons.addWidget(manage)
+        self.copy_btn = QPushButton("Copy value")
+        self.copy_btn.setToolTip("Copy the complete value (Ctrl+Shift+C)")
+        self.copy_btn.clicked.connect(self._copy_value)
+        buttons.addWidget(self.copy_btn)
         buttons.addWidget(QSizeGrip(self))
-        layout.addLayout(buttons)
+        self.management = QWidget()
+        self.management.setLayout(buttons)
+        layout.addWidget(self.management)
+        self.feedback = QLabel("↑↓ Select   Enter Read   F2 Edit key   Shift+F2 Edit value   Ctrl+Shift+C Copy   Esc Close")
+        self.feedback.setWordWrap(True)
+        layout.addWidget(self.feedback)
+        self._feedback_timer = QTimer(self)
+        self._feedback_timer.setSingleShot(True)
+        self._feedback_timer.setInterval(1600)
+        self._feedback_timer.timeout.connect(self._restore_feedback)
 
         QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
         QShortcut(QKeySequence("Ctrl+="), self, activated=lambda: self._change_font_size(1))
         QShortcut(QKeySequence("Ctrl++"), self, activated=lambda: self._change_font_size(1))
         QShortcut(QKeySequence("Ctrl+-"), self, activated=lambda: self._change_font_size(-1))
         QShortcut(QKeySequence("Ctrl+T"), self, activated=self._new_topic)
+        QShortcut(QKeySequence("Alt+T"), self, activated=self._new_topic)
+        QShortcut(QKeySequence("Alt+N"), self, activated=self._new_entry)
+        QShortcut(QKeySequence("Alt+I"), self, activated=self._edit_entry)
+        QShortcut(QKeySequence("Alt+D"), self, activated=self._delete_topic)
         QShortcut(QKeySequence("Ctrl+N"), self, activated=self._new_entry)
         QShortcut(QKeySequence("F2"), self, activated=self._edit_entry)
-        QShortcut(QKeySequence("Delete"), self, activated=self._on_delete_key)
-        QShortcut(
-            QKeySequence("Return"), self.table,
-            activated=lambda: self.table.edit(self.table.currentIndex()),
-        )
+        QShortcut(QKeySequence("Shift+F2"), self, activated=self._edit_value)
+        QShortcut(QKeySequence("Ctrl+Shift+C"), self, activated=self._copy_value)
+        QShortcut(QKeySequence("Escape"), self, activated=self._escape)
+        self.search_edit.installEventFilter(self)
 
         self.topic_list.installEventFilter(self)
         self.table.installEventFilter(self)
@@ -587,6 +682,75 @@ class NotesWindow(QMainWindow):
         if last_search:
             self.search_edit.setText(last_search)
             self.search_edit.selectAll()
+
+    def _toggle_topics(self, checked):
+        self.topic_list.setVisible(checked or self.always_topics_action.isChecked())
+
+    def _set_topic_layout(self, always):
+        save_notes_always_show_topics(always)
+        self.topic_list.setVisible(always)
+        self.topics_btn.setVisible(not always)
+        self.topics_btn.setChecked(always)
+
+    def _selected_identity(self):
+        item = self.table.item(self.table.currentRow(), 0)
+        return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+    def _selected_value(self):
+        identity = self._selected_identity()
+        if identity:
+            topic, index = identity
+            entries = self._all_topics().get(topic, [])
+            if index < len(entries):
+                return entries[index]["value"]
+        return None
+
+    def _update_preview(self):
+        if not hasattr(self, "preview"):
+            return
+        value = self._selected_value()
+        self.preview.setPlainText(value if value is not None else "")
+        self.preview.setPlaceholderText("No matching notes." if not self.table.rowCount()
+                                        else "Select a note to read its full value.")
+        self.copy_btn.setEnabled(value is not None)
+        topic, _ = self._selected_entry()
+        self.edit_entry_btn.setEnabled(topic is not None)
+        self.delete_entry_btn.setEnabled(topic is not None)
+        self.edit_value_btn.setEnabled(topic is not None)
+
+    def _copy_value(self):
+        value = self._selected_value()
+        if value is not None:
+            QApplication.clipboard().setText(value)
+            self.feedback.setText("Value copied.")
+            self._feedback_timer.start()
+
+    def _restore_feedback(self):
+        self.feedback.setText("↑↓ Select   Enter Read   F2 Edit key   Shift+F2 Edit value   Ctrl+Shift+C Copy   Esc Close")
+
+    def _commit_editor(self):
+        if not self._active_editor:
+            return True
+        delegate, editor, index = self._active_editor
+        if not delegate.valid(editor):
+            return False
+        delegate.setModelData(editor, self.table.model(), index)
+        delegate.closeEditor.emit(editor, QStyledItemDelegate.EndEditHint.NoHint)
+        self._active_editor = None
+        return True
+
+    def _escape(self):
+        if self._active_editor:
+            delegate, editor, _ = self._active_editor
+            delegate.closeEditor.emit(editor, QStyledItemDelegate.EndEditHint.RevertModelCache)
+            self._active_editor = None
+            self.search_edit.setFocus()
+        else:
+            self.close()
+
+    def _dismiss_from_backdrop(self):
+        if not self._active_editor:
+            self.close()
 
     # --- data helpers -----------------------------------------------------
 
@@ -649,6 +813,8 @@ class NotesWindow(QMainWindow):
         query = self.search_edit.text().strip().lower()
         searching = bool(query)
 
+        previous = self._selected_identity()
+        self.table.blockSignals(True)
         self.table.setRowCount(0)
         if searching:
             self.table.setColumnCount(3)
@@ -673,8 +839,7 @@ class NotesWindow(QMainWindow):
         self._populating = True
         for row, (topic, index, key, value) in enumerate(rows):
             self.table.insertRow(row)
-            # trailing newlines would make the centered text look top-aligned
-            value = value.rstrip("\n")
+            # Keep complete values in the model; only the delegate abbreviates display.
             cells = [topic, key, value] if searching else [key, value]
             editable = not self._is_readonly_topic(topic)
             for col, text in enumerate(cells):
@@ -698,16 +863,24 @@ class NotesWindow(QMainWindow):
 
         # multi-line editor on the value column (plain default elsewhere)
         value_col = 2 if searching else 1
-        self.table.setItemDelegateForColumn(0, QStyledItemDelegate(self.table))
-        self.table.setItemDelegateForColumn(1, self._multiline_delegate if not searching else QStyledItemDelegate(self.table))
+        self.table.setItemDelegateForColumn(0, self._key_delegate)
+        self.table.setItemDelegateForColumn(1, self._multiline_delegate if not searching else self._key_delegate)
         self.table.setItemDelegateForColumn(value_col, self._multiline_delegate)
 
         self.table.resizeRowsToContents()
 
+        self.table.blockSignals(False)
+        selected_row = next((r for r in range(self.table.rowCount())
+                             if self.table.item(r, 0).data(Qt.ItemDataRole.UserRole) == previous), 0)
+        if self.table.rowCount():
+            self.table.setCurrentCell(selected_row, 0)
+        self._update_preview()
         readonly = self._is_readonly_topic(self._current_topic()) or searching
         self.new_entry_btn.setEnabled(not readonly)
-        self.edit_entry_btn.setEnabled(not readonly)
-        self.delete_entry_btn.setEnabled(not readonly)
+        topic, index = self._selected_entry()
+        self.edit_entry_btn.setEnabled(topic is not None)
+        self.delete_entry_btn.setEnabled(topic is not None)
+        self.edit_value_btn.setEnabled(topic is not None)
         self.delete_topic_btn.setEnabled(not self._is_readonly_topic(self._current_topic()))
 
     # --- actions ----------------------------------------------------------
@@ -738,6 +911,8 @@ class NotesWindow(QMainWindow):
         return result
 
     def _new_topic(self):
+        if not self._commit_editor():
+            return
         dialog = QInputDialog(self)
         dialog.setWindowTitle("New topic")
         dialog.setLabelText("Topic name:")
@@ -748,6 +923,8 @@ class NotesWindow(QMainWindow):
             self._refresh_topics(select=name.strip())
 
     def _delete_topic(self):
+        if not self._commit_editor():
+            return
         topic = self._current_topic()
         if not topic or self._is_readonly_topic(topic):
             return
@@ -763,6 +940,8 @@ class NotesWindow(QMainWindow):
             self._refresh_topics()
 
     def _new_entry(self):
+        if not self._commit_editor():
+            return
         topic = self._current_topic()
         if not topic or self._is_readonly_topic(topic):
             return
@@ -786,12 +965,21 @@ class NotesWindow(QMainWindow):
             return None, None
         return topic, index
 
+    def _edit_value(self):
+        if self._active_editor or self._selected_entry()[0] is None:
+            return
+        self.table.setFocus()
+        self.table.edit(self.table.model().index(self.table.currentRow(), self.table.columnCount() - 1))
+
     def _edit_entry(self):
+        if self._active_editor:
+            return
         topic, index = self._selected_entry()
         if topic is None:
             return
         # open the in-place editor on the key cell of the selected row
         col = 1 if self.table.columnCount() == 3 else 0
+        self.table.setFocus()
         self.table.edit(self.table.model().index(self.table.currentRow(), col))
 
     def _on_item_changed(self, item):
@@ -812,8 +1000,11 @@ class NotesWindow(QMainWindow):
             value = self.table.item(item.row(), 1).text()
         update_topic_entry(topic, index, key, value)
         self.table.resizeRowToContents(item.row())
+        self._update_preview()
 
     def _delete_entry(self):
+        if not self._commit_editor():
+            return
         topic, index = self._selected_entry()
         if topic is None:
             return
@@ -838,14 +1029,29 @@ class NotesWindow(QMainWindow):
         font = QFont(self.font())
         font.setPointSize(self._font_size)
         self.setFont(font)
-        # Widgets that don't inherit the window font need it set directly
-        self.table.horizontalHeader().setFont(font)
+        # Styles and the native slide host can break font inheritance. Apply
+        # the preference to the whole live interface, including the preview.
+        for widget in self.findChildren(QWidget):
+            widget.setFont(font)
 
     def eventFilter(self, obj, event):
         if obj is self or obj is self._slide_surface:
             if event.type() in (QEvent.Type.Move, QEvent.Type.Resize):
                 self._update_backdrop_mask()
             return super().eventFilter(obj, event)
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Delete and obj in (self.table, self.topic_list):
+            self._on_delete_key()
+            return True
+        if event.type() == QEvent.Type.KeyPress and obj in (self.search_edit, self.table):
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if self.table.rowCount():
+                    self.preview.setFocus()
+                return True
+            if obj is self.search_edit and event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
+                row = self.table.currentRow() + (1 if event.key() == Qt.Key.Key_Down else -1)
+                if self.table.rowCount():
+                    self.table.setCurrentCell(max(0, min(row, self.table.rowCount() - 1)), 0)
+                return True
         # Item views consume '/' for their own keyboard search; intercept it
         # to focus the search bar instead.
         if (
@@ -943,7 +1149,7 @@ class NotesWindow(QMainWindow):
     def _create_backdrop(self):
         if self._backdrop is None and get_notes_backdrop_opacity():
             self._backdrop_exclusion = None
-            self._backdrop = NotesBackdrop(self.screen(), self.close, get_notes_backdrop_style())
+            self._backdrop = NotesBackdrop(self.screen(), self._dismiss_from_backdrop, get_notes_backdrop_style())
 
     def _update_backdrop(self):
         if self._backdrop is not None:
@@ -989,7 +1195,7 @@ class NotesWindow(QMainWindow):
             self._create_backdrop()
             self._update_backdrop()
         if (get_notes_animation_strategy() in ("slide", "palette")
-                and get_notes_fade_in_duration_ms() and not self.isVisible()):
+                and get_notes_fade_in_duration_ms() and not self._reduced_motion() and not self.isVisible()):
             self._prepare_opening()
             # An override-redirect surface is not repositioned by GNOME.
             # Host the actual widgets, so typing and editing remain live.
@@ -1029,9 +1235,28 @@ class NotesWindow(QMainWindow):
             self._fade_in.start()
         self._queue_backdrop_fade()
 
+    def _reduced_motion(self):
+        if not hasattr(self, "_system_reduced_motion"):
+            reduced = False
+            try:
+                if sys.platform.startswith("linux"):
+                    result = subprocess.run(
+                        ["gsettings", "get", "org.gnome.desktop.interface", "enable-animations"],
+                        capture_output=True, text=True, timeout=0.3)
+                    reduced = result.returncode == 0 and result.stdout.strip() == "false"
+                elif sys.platform == "win32":
+                    import ctypes
+                    enabled = ctypes.c_int(1)
+                    if ctypes.windll.user32.SystemParametersInfoW(0x1042, 0, ctypes.byref(enabled), 0):
+                        reduced = not enabled.value
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+            self._system_reduced_motion = reduced
+        return self._system_reduced_motion
+
     def _prepare_opening(self):
         self._fade_in.stop()
-        duration = get_notes_fade_in_duration_ms()
+        duration = 0 if self._reduced_motion() else get_notes_fade_in_duration_ms()
         speed = get_notes_animation_startup_speed()
         self.startup_speed_combo.blockSignals(True)
         self.startup_speed_combo.setCurrentIndex(speed - 1)
@@ -1055,7 +1280,13 @@ class NotesWindow(QMainWindow):
         # Avoid rendering two full-screen frames for each 60 Hz presentation.
         interval = round(1000 / max(30.0, display.refreshRate()))
         self._fade_in.setUpdateInterval(max(8, min(33, interval)))
-        self.resize(int(screen.width() * 0.7), int(screen.height() * 0.7))
+        self._preparing_opening = True
+        size = self._session_size
+        width = min(size.width() if size else 1000, max(1, screen.width() - 32))
+        height = min(size.height() if size else min(700, int(screen.height() * 0.7)),
+                     max(1, screen.height() - 32))
+        self.resize(width, height)
+        self._preparing_opening = False
         self._slide_target = QPoint(
             screen.x() + (screen.width() - self.width()) // 2,
             screen.y() + (screen.height() - self.height()) // 2,
@@ -1130,8 +1361,26 @@ class NotesWindow(QMainWindow):
         super().resizeEvent(event)
         if hasattr(self, "_fade_overlay"):
             self._fade_overlay.setGeometry(self.rect())
+        if hasattr(self, "result_splitter"):
+            self.result_splitter.setOrientation(Qt.Orientation.Vertical if self.width() < 800
+                                                else Qt.Orientation.Horizontal)
+        if self.isVisible() and not self._preparing_opening:
+            self._session_size = self.size()
+
+    def close(self):
+        if not self._commit_editor():
+            return False
+        if self._slide_surface is not None:
+            # Closing a child while reparenting it in closeEvent can remap it
+            # as a top-level window. Hide first; hideEvent owns host cleanup.
+            self.hide()
+            return True
+        return super().close()
 
     def closeEvent(self, event):
+        if not self._commit_editor():
+            event.ignore()
+            return
         self._remove_backdrop()
         if self._slide_surface is not None:
             self._fade_in.stop()
@@ -1163,7 +1412,7 @@ class NotesWindow(QMainWindow):
         transitions, so the OS-level focused window is the source of truth:
         if it still reports our title, we're mid-transition — do nothing.
         """
-        if self.isActiveWindow() or QApplication.activeWindow() is not None:
+        if self._active_editor or self.isActiveWindow() or QApplication.activeWindow() is not None:
             return
         try:
             focused = get_focused_window()

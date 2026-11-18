@@ -102,8 +102,8 @@ def test_keyboard_topic_selection_exits_search(qtbot, temp_data_dir):
 
 @pytest.mark.parametrize("value, expected", [
     (0, 0), (240, 240), (1000, 1000),
-    (-1, 120), (1001, 120), ("fast", 120), (None, 120),
-    (True, 120), (1.5, 120),
+    (-1, 180), (1001, 180), ("fast", 180), (None, 180),
+    (True, 180), (1.5, 180),
 ])
 def test_fade_duration_config(temp_data_dir, value, expected):
     (temp_data_dir / "config.json").write_text(json.dumps({
@@ -113,6 +113,7 @@ def test_fade_duration_config(temp_data_dir, value, expected):
 
 
 def test_fade_in_progresses_and_finishes(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy("fade")
     window = _make_window(qtbot)
     window.show()
     assert window._fade_in.duration() == 120
@@ -130,6 +131,7 @@ def test_fade_in_progresses_and_finishes(qtbot, temp_data_dir):
 
 @pytest.mark.parametrize("hide_method", ["hide", "close"])
 def test_interrupted_fade_stops_and_reopens(qtbot, temp_data_dir, hide_method):
+    data_storage.save_notes_animation_strategy("fade")
     window = _make_window(qtbot)
     window.show()
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
@@ -178,6 +180,7 @@ def test_hiding_immediately_stops_animation(qtbot, temp_data_dir):
 
 def test_fade_reveals_rendered_content_without_native_opacity(
         qtbot, temp_data_dir, monkeypatch):
+    data_storage.save_notes_animation_strategy("fade")
     data_storage.save_notes_fade_in_duration_ms(1000)
     data_storage.add_topic("Example topic")
     window = _make_window(qtbot)
@@ -210,12 +213,15 @@ def test_fade_reveals_rendered_content_without_native_opacity(
 
 
 def test_fade_cover_follows_resize_and_passes_mouse_input(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy("fade")
     data_storage.add_topic("alpha")
     data_storage.add_topic("beta")
     window = _make_window(qtbot)
     window.show()
     window.resize(600, 400)
     assert window._fade_overlay.geometry() == window.rect()
+    window.topics_btn.setChecked(True)
+    qtbot.wait(10)
     item = window.topic_list.item(1)
     position = window.topic_list.viewport().mapTo(
         window, window.topic_list.visualItemRect(item).center())
@@ -242,6 +248,7 @@ def test_fade_config_is_reloaded_and_can_disable_animation(qtbot, temp_data_dir)
 
 
 def test_fade_slider_saves_and_restores_without_overwriting_settings(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy("fade")
     data_storage.save_notes_last_search("keep this")
     window = _make_window(qtbot)
     assert window.fade_duration_slider.value() == 120
@@ -392,7 +399,7 @@ def test_backdrop_fades_independently_of_motion_and_live_opacity(qtbot, temp_dat
     assert backdrop.strength == 0  # Focus colors change before the scrim fades.
     qtbot.waitUntil(lambda: window._backdrop_fade.state() == QTimeLine.State.Running)
     window._backdrop_fade.setCurrentTime(160)
-    assert backdrop.strength == pytest.approx(0.5 * 0.6)
+    assert backdrop.strength == pytest.approx(0.5 * 0.4)
     window.backdrop_slider.setValue(80)
     assert data_storage.get_notes_backdrop_opacity() == 80
     assert backdrop.strength == pytest.approx(0.5 * 0.8)
@@ -562,7 +569,7 @@ def test_background_fade_setting_is_saved_and_independent(qtbot, temp_data_dir):
     qtbot.waitUntil(lambda: window._backdrop_fade.state() == QTimeLine.State.Running)
     assert window._backdrop_fade.duration() == 640
     window._backdrop_fade.setCurrentTime(320)
-    assert window._backdrop.strength == pytest.approx(0.3)
+    assert window._backdrop.strength == pytest.approx(0.2)
 
 
 @pytest.mark.parametrize('value, expected', [(None, 320), (True, 320), (-1, 320),
@@ -576,7 +583,7 @@ def test_background_fade_can_be_disabled(qtbot, temp_data_dir):
     data_storage.save_notes_backdrop_fade_duration_ms(0)
     window = _make_window(qtbot)
     window.show()
-    qtbot.waitUntil(lambda: window._backdrop.strength == pytest.approx(0.6))
+    qtbot.waitUntil(lambda: window._backdrop.strength == pytest.approx(0.4))
     assert window._backdrop_fade.state() == QTimeLine.State.NotRunning
 
 

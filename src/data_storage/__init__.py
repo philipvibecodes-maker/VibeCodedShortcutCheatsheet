@@ -139,7 +139,7 @@ def save_notes_font_size(size: int) -> None:
 def get_notes_fade_in_duration_ms() -> int:
     """Return duration (0 disables it); default to 120 ms fade / 360 ms slide / 180 ms palette."""
     config = _get_config()
-    default = {"slide": 360, "palette": 180}.get(config.get("notes_animation_strategy"), 120)
+    default = {"fade": 120, "slide": 360, "palette": 180}.get(config.get("notes_animation_strategy"), 180)
     duration = config.get("notes_fade_in_duration_ms", default)
     # Reject malformed values and bound the duration to keep opening responsive.
     if type(duration) is not int or not 0 <= duration <= 1000:
@@ -153,8 +153,8 @@ def save_notes_fade_in_duration_ms(duration: int) -> None:
 
 
 def get_notes_animation_strategy() -> str:
-    strategy = _get_config().get("notes_animation_strategy", "fade")
-    return strategy if strategy in ("fade", "slide", "palette") else "fade"
+    strategy = _get_config().get("notes_animation_strategy", "palette")
+    return strategy if strategy in ("fade", "slide", "palette") else "palette"
 
 
 def save_notes_animation_strategy(strategy: str) -> None:
@@ -171,8 +171,8 @@ def save_notes_animation_startup_speed(speed: int) -> None:
 
 
 def get_notes_backdrop_opacity() -> int:
-    opacity = _get_config().get("notes_backdrop_opacity", 60)
-    return opacity if type(opacity) is int and 0 <= opacity <= 100 else 60
+    opacity = _get_config().get("notes_backdrop_opacity", 40)
+    return opacity if type(opacity) is int and 0 <= opacity <= 100 else 40
 
 
 def save_notes_backdrop_opacity(opacity: int) -> None:
@@ -195,6 +195,14 @@ def get_notes_backdrop_fade_duration_ms() -> int:
 
 def save_notes_backdrop_fade_duration_ms(duration: int) -> None:
     _save_config_value("notes_backdrop_fade_duration_ms", duration)
+
+
+def get_notes_always_show_topics() -> bool:
+    return _get_config().get("notes_always_show_topics", False) is True
+
+
+def save_notes_always_show_topics(value: bool) -> None:
+    _save_config_value("notes_always_show_topics", value)
 
 
 def get_notes_last_topic() -> Optional[str]:

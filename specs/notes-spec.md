@@ -31,3 +31,34 @@ The application has a notes window, separate from the cheatsheet window, that wi
 - revision 11: add persisted `notes_backdrop_style` with `dim` (default), `spotlight`, and `blur`. Dark translucent uses a uniform cool near-black scrim; Soft spotlight uses a cached gradient, lighter near the screen center and darker at the edges; neither captures the desktop. Blur retains its cached capture implementation. Expose a style selector marked "next opening" and a shared live opacity slider. Preserve opacity and animation settings, reject invalid saved styles to `dim`, and keep all backgrounds out of notes using the existing mask. Prepare the exclusion before initially showing a background, including with animation disabled.
 - revision 12: give all backdrops an independent linear fade, configured via `notes_backdrop_fade_duration_ms` (integer 0–1000, default 320), with a Notes menu slider that ignores arrow keys. Queue it 75 ms after notes opens to distinguish the native focus-color change from the backdrop transition; never delay or restart window motion. Background fade duration applies on the next opening, independently of window duration/startup speed; 0 shows the target opacity immediately after focus settling. Completing window motion must not force backdrop completion. Cancel the queued start and fade on hide/close. For blur only, retain a clean pre-opening capture, refresh after focus settling, replace notes plus a 32px shadow margin with clean pixels before blurring, and discard the original capture. Dark styles continue making no capture calls.
 - revision 13: present topic, entry, and confirmation dialogs through a shared foreground modal path. Finish any in-progress window entrance before centering the dialog; use application modality and topmost/X11 override-redirect flags so GNOME cannot put it behind the notes host. Set modality before flags (QMessageBox may reset its flags on modality changes), and use Qt-rendered message boxes. Raise/activate the dialog, center after mapping, restore notes activation after dismissal, and release dialog objects. Alt+T must focus the New topic text field and support accept/cancel under all animation strategies.
+
+## Revision 14 — search-first retrieval
+
+- Present a prominent search field, compact single-line result summaries, and a selectable,
+  read-only full-value preview. Preserve substring matching across topic/key/value and existing
+  topic/entry result order. Preserve complete stored values, including trailing newlines, when
+  displaying previews, editing, and copying. Restore the previous query fully selected.
+- Notes → Layout → Always show topics is persisted as `notes_always_show_topics` (boolean,
+  default false). Otherwise the Topics button expands/collapses the sidebar for this session.
+  Switching the layout preserves search, selection, and an active editor. Topic selection still
+  clears global search. Management actions live under Manage with existing mnemonics/shortcuts.
+- Start at 1000 logical pixels wide and min(700, 70% work-area height), bounded to the work area
+  with 16px margins. Keep user-resized dimensions during the session. Below 800 logical pixels
+  wide, stack results over the preview. Retain font-size controls and resizing.
+- Select the first result initially and preserve the selected topic/index on matching refreshes.
+  Up/Down in search moves selection without transferring focus; Enter focuses the preview.
+  No results clears preview and disables copy/edit/delete. Ctrl+Shift+C / Copy value copies the
+  complete selected value and shows brief feedback without dismissing notes.
+- Editing requires F2 / Edit key or Shift+F2 / Edit value. Disable automatic typing/double-click
+  edit triggers. Key edits commit with Enter; multiline values commit with Ctrl+Enter; Tab retains
+  cell-editor navigation. Escape cancels a cell edit before dismissing on the next press. Empty
+  keys keep the editor open with feedback. Focus loss and backdrop clicks do not dismiss active
+  edits. Explicit close/toggle commits valid edits and rejects closing on an invalid key.
+  Search and topic selection are disabled during an edit to prevent rebuilding its model.
+  User-note edits/deletes work from global search; shortcut topics remain read-only.
+- Default absent appearance preferences to palette / 180ms / startup speed 3 / dim background /
+  40% opacity. Preserve explicit saved values, independent background timing, fade/slide options,
+  and Off. Detect reduced motion through GNOME enable-animations or Windows client-area-animation
+  settings when available, suppressing entrance reveal/translation. Manual Off remains available.
+  No animation is added to result updates or dismissal.
+- Review artifacts and reproduction instructions: `docs/notes-search-review/revision-14/README.md`.
