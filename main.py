@@ -103,6 +103,9 @@ def main():
 
     window = CheatsheetWindow(open_settings_for_new_app=not toggle_notes_flag)
 
+    from src.tray import create_tray_icon
+    tray_icon = create_tray_icon(app)
+
     def on_new_connection():
         client = server.nextPendingConnection()
         if client:

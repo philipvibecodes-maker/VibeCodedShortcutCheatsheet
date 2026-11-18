@@ -5,6 +5,7 @@ A desktop app that displays keyboard shortcuts for the currently focused applica
 ## Features
 
 - **Auto-updating cheatsheet**: Automatically shows shortcuts for the currently focused application
+- **Running indicator**: A keyboard icon appears in the system tray while the app is running, including when its windows are hidden. On GNOME, AppIndicator/tray support must be enabled for it to appear in the top panel.
 - **Borderless design**: Modern borderless window with rounded corners and dark theme
 - **Font size control**: Adjust font size with Ctrl+ and Ctrl- (8-24pt range)
 - **Corner positioning**: Move window to any corner using arrow keys
