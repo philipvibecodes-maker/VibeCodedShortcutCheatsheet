@@ -179,6 +179,15 @@ def save_notes_backdrop_opacity(opacity: int) -> None:
     _save_config_value("notes_backdrop_opacity", opacity)
 
 
+def get_notes_backdrop_style() -> str:
+    style = _get_config().get("notes_backdrop_style", "dim")
+    return style if style in ("dim", "spotlight", "blur") else "dim"
+
+
+def save_notes_backdrop_style(style: str) -> None:
+    _save_config_value("notes_backdrop_style", style)
+
+
 def get_notes_last_topic() -> Optional[str]:
     """Get the topic the notes window last showed, or None if never set."""
     return _get_config().get("notes_last_topic")

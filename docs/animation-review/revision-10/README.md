@@ -19,7 +19,7 @@ completion; the notes window stays excluded from backdrop blur.
 Recorded with:
 
 ```sh
-QT_QPA_PLATFORM=xcb venv/bin/python tools/record_notes_animation.py /tmp/palette-review --strategy palette --duration 180 --speed 3
+QT_QPA_PLATFORM=xcb venv/bin/python tools/record_notes_animation.py /tmp/palette-review --strategy palette --duration 180 --speed 3 --background blur
 ```
 
 The frame sequence was decoded from the saved video after recording, rather

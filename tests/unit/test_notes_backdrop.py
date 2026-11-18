@@ -93,7 +93,7 @@ def test_backdrop_paints_cached_image_with_requested_alpha(qtbot):
             return image
 
     screen = Screen()
-    backdrop = NotesBackdrop(screen, lambda: None)
+    backdrop = NotesBackdrop(screen, lambda: None, "blur")
     qtbot.addWidget(backdrop)
     for strength in (0.0, 0.5, 1.0):
         backdrop.setStrength(strength)
@@ -101,3 +101,31 @@ def test_backdrop_paints_cached_image_with_requested_alpha(qtbot):
         assert abs(pixel.alpha() - round(255 * strength)) <= 1
     assert screen.calls == 1
     assert backdrop.graphicsEffect() is None
+
+
+@pytest.mark.parametrize('style', ['dim', 'spotlight'])
+def test_dark_backgrounds_need_no_capture_and_have_correct_opacity(qtbot, style):
+    from PyQt6.QtCore import QRect
+    from src.notes.backdrop import NotesBackdrop
+
+    class Screen:
+        def geometry(self):
+            return QRect(0, 0, 200, 200)
+
+        def grabWindow(self, window):
+            pytest.fail('Dark background styles must not capture the desktop')
+
+    backdrop = NotesBackdrop(Screen(), lambda: None, style)
+    qtbot.addWidget(backdrop)
+    backdrop.setStrength(0.6)
+    image = backdrop.grab().toImage()
+    center = image.pixelColor(100, 100)
+    edge = image.pixelColor(0, 0)
+    assert center.red() < 15 and center.blue() < 25
+    if style == 'dim':
+        assert center == edge
+        assert abs(center.alpha() - 153) <= 1
+    else:
+        assert 60 < center.alpha() < edge.alpha() <= 153
+    backdrop.setStrength(0)
+    assert backdrop.grab().toImage().pixelColor(0, 0).alpha() == 0

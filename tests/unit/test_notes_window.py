@@ -507,3 +507,26 @@ def test_palette_is_readable_early_and_finishes_reveal_before_motion(qtbot, temp
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
     assert surface.pos() == window._slide_target
     assert int(surface.winId()) == native_id
+
+
+@pytest.mark.parametrize('style', ['dim', 'spotlight', 'blur'])
+def test_background_style_persists_and_applies_next_opening(qtbot, temp_data_dir, style):
+    window = _make_window(qtbot)
+    window.show()
+    original = window._backdrop
+    index = window.backdrop_style_combo.findData(style)
+    window.backdrop_style_combo.setCurrentIndex(index)
+    assert data_storage.get_notes_backdrop_style() == style
+    assert window._backdrop is original
+    window.close()
+    window.show()
+    assert window._backdrop.style == style
+    assert window.backdrop_style_combo.currentData() == style
+
+
+@pytest.mark.parametrize('value, expected', [(None, 'dim'), ('invalid', 'dim'),
+                                           ('dim', 'dim'), ('spotlight', 'spotlight'),
+                                           ('blur', 'blur')])
+def test_background_style_validation(temp_data_dir, value, expected):
+    data_storage.save_notes_backdrop_style(value)
+    assert data_storage.get_notes_backdrop_style() == expected

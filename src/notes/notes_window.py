@@ -44,6 +44,7 @@ from src.data_storage import (
     get_notes_animation_strategy,
     get_notes_animation_startup_speed,
     get_notes_backdrop_opacity,
+    get_notes_backdrop_style,
     get_notes_font_size,
     get_notes_last_search,
     get_notes_last_topic,
@@ -52,6 +53,7 @@ from src.data_storage import (
     save_notes_animation_strategy,
     save_notes_animation_startup_speed,
     save_notes_backdrop_opacity,
+    save_notes_backdrop_style,
     save_notes_font_size,
     save_notes_last_search,
     save_notes_last_topic,
@@ -446,16 +448,29 @@ class NotesWindow(QMainWindow):
         )
         startup_label.setBuddy(self.startup_speed_combo)
         fade_layout.addWidget(self.startup_speed_combo)
+        style_label = QLabel("&Background style (next opening):")
+        fade_layout.addWidget(style_label)
+        self.backdrop_style_combo = QComboBox()
+        for label, value in (("Dark translucent", "dim"), ("Soft spotlight", "spotlight"),
+                             ("Blurred desktop", "blur")):
+            self.backdrop_style_combo.addItem(label, value)
+        self.backdrop_style_combo.setCurrentIndex(
+            self.backdrop_style_combo.findData(get_notes_backdrop_style()))
+        self.backdrop_style_combo.setToolTip("Applies next time notes opens. Dark styles need no desktop capture.")
+        self.backdrop_style_combo.currentIndexChanged.connect(
+            lambda index: save_notes_backdrop_style(self.backdrop_style_combo.itemData(index)))
+        style_label.setBuddy(self.backdrop_style_combo)
+        fade_layout.addWidget(self.backdrop_style_combo)
         self.backdrop_label = QLabel()
         fade_layout.addWidget(self.backdrop_label)
         self.backdrop_slider = _DurationSlider(Qt.Orientation.Horizontal)
         self.backdrop_slider.setRange(0, 100)
         self.backdrop_slider.setValue(get_notes_backdrop_opacity())
-        self.backdrop_slider.setAccessibleName("Background blur opacity")
+        self.backdrop_slider.setAccessibleName("Background opacity")
         self.backdrop_slider.setTracking(False)
         self.backdrop_slider.valueChanged.connect(self._save_backdrop_opacity)
         self.backdrop_label.setBuddy(self.backdrop_slider)
-        self.backdrop_label.setText(f"Background &blur opacity: {self.backdrop_slider.value()}%")
+        self.backdrop_label.setText(f"Background &opacity: {self.backdrop_slider.value()}%")
         fade_layout.addWidget(self.backdrop_slider)
         fade_action = QWidgetAction(notes_menu)
         fade_action.setDefaultWidget(fade_controls)
@@ -830,17 +845,18 @@ class NotesWindow(QMainWindow):
 
     def _save_backdrop_opacity(self, opacity):
         save_notes_backdrop_opacity(opacity)
-        self.backdrop_label.setText(f"Background &blur opacity: {opacity}%")
+        self.backdrop_label.setText(f"Background &opacity: {opacity}%")
         if self._backdrop is None and opacity and self.isVisible():
             self._create_backdrop()
+            self._update_backdrop()
+            self._backdrop.show()
             self.raise_()
         self._update_backdrop()
 
     def _create_backdrop(self):
         if self._backdrop is None and get_notes_backdrop_opacity():
             self._backdrop_exclusion = None
-            self._backdrop = NotesBackdrop(self.screen(), self.close)
-            self._backdrop.show()
+            self._backdrop = NotesBackdrop(self.screen(), self.close, get_notes_backdrop_style())
 
     def _update_backdrop(self):
         if self._backdrop is not None:
@@ -868,7 +884,11 @@ class NotesWindow(QMainWindow):
             self.backdrop_slider.blockSignals(True)
             self.backdrop_slider.setValue(opacity)
             self.backdrop_slider.blockSignals(False)
-            self.backdrop_label.setText(f"Background &blur opacity: {opacity}%")
+            self.backdrop_label.setText(f"Background &opacity: {opacity}%")
+            self.backdrop_style_combo.blockSignals(True)
+            self.backdrop_style_combo.setCurrentIndex(
+                self.backdrop_style_combo.findData(get_notes_backdrop_style()))
+            self.backdrop_style_combo.blockSignals(False)
             self._opening_progress = 0.0 if get_notes_fade_in_duration_ms() else 1.0
             self._create_backdrop()
             self._update_backdrop()
@@ -954,6 +974,11 @@ class NotesWindow(QMainWindow):
         else:
             self.move(self._slide_target)
         self._fade_overlay.setGeometry(self.rect())
+        # Prepare the final exclusion before mapping the backdrop. Otherwise
+        # a disabled animation can briefly show a hole at the old window position.
+        if self._backdrop is not None and not self._backdrop.isVisible():
+            self._update_backdrop()
+            self._backdrop.show()
         return duration
 
     def _animate_opening(self, progress):

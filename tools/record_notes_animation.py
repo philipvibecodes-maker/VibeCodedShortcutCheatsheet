@@ -21,8 +21,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('output', type=Path)
 parser.add_argument('--duration', type=int, default=360)
 parser.add_argument('--strategy', choices=['fade', 'slide', 'palette'], default='slide')
+parser.add_argument('--background', choices=['dim', 'spotlight', 'blur'], default='dim')
+parser.add_argument('--menu', action='store_true', help='Show Notes controls in the recording')
+parser.add_argument('--theme', choices=['dark', 'light'], default='dark')
+parser.add_argument('--opacity', type=int, default=58)
 parser.add_argument('--speed', type=int, default=3)
 args = parser.parse_args()
+if not 0 <= args.opacity <= 100 or not 0 <= args.duration <= 1000 or not 1 <= args.speed <= 6:
+    parser.error('opacity must be 0–100, duration 0–1000, and speed 1–6')
 args.output.mkdir(parents=True, exist_ok=True)
 app = QApplication([])
 app.setQuitOnLastWindowClosed(False)
@@ -30,7 +36,8 @@ temporary = tempfile.TemporaryDirectory()
 data_storage.get_data_dir = lambda: Path(temporary.name)
 (Path(temporary.name) / 'config.json').write_text(json.dumps({
     'notes_animation_strategy': args.strategy, 'notes_fade_in_duration_ms': args.duration,
-    'notes_animation_startup_speed': args.speed, 'notes_backdrop_opacity': 58,
+    'notes_animation_startup_speed': args.speed, 'notes_backdrop_opacity': args.opacity,
+    'notes_backdrop_style': args.background,
 }))
 for topic in ('Daily notes', 'Git commands', 'Project ideas'):
     data_storage.add_topic(topic)
@@ -38,6 +45,8 @@ for topic in ('Daily notes', 'Git commands', 'Project ideas'):
 
 background = QWidget()
 background.setStyleSheet('QWidget { background: #18324b; color: #eaf4ff; } QLabel { padding: 30px; border: 1px solid #526c80; background: #25445b; font-size: 24px; }')
+if args.theme == 'light':
+    background.setStyleSheet('QWidget { background: #f0f3f7; color: #263547; } QLabel { padding: 30px; border: 1px solid #cbd3df; background: #fff; font-size: 24px; }')
 layout = QVBoxLayout(background)
 layout.addWidget(QLabel('Animation review — sample desktop'))
 grid = QGridLayout()
@@ -74,6 +83,10 @@ def open_notes():
     global opening_started
     opening_started = time.perf_counter()
     window.show()
+    if args.menu:
+        menu = window.menuBar().actions()[0].menu()
+        QTimer.singleShot(500, lambda: menu.popup(
+            window.menuBar().mapToGlobal(window.menuBar().rect().bottomLeft())))
     QTimer.singleShot(1600, finish)
 
 def finish():
@@ -81,6 +94,7 @@ def finish():
     recorder.communicate(b'q', timeout=10)
     (args.output / 'timing.json').write_text(json.dumps({
         'duration_ms': args.duration, 'startup_speed': args.speed,
+        'background': args.background, 'opacity': args.opacity, 'theme': args.theme,
         'frames': frames,
     }, indent=2))
     background.close()

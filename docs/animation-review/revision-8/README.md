@@ -32,7 +32,7 @@ Changes:
 Reproduce from a GNOME/X11 desktop session with ffmpeg installed:
 
 ```sh
-QT_QPA_PLATFORM=xcb venv/bin/python tools/record_notes_animation.py /tmp/notes-review --duration 360 --speed 3
+QT_QPA_PLATFORM=xcb venv/bin/python tools/record_notes_animation.py /tmp/notes-review --duration 360 --speed 3 --background blur
 ```
 
 The script shows a temporary full-screen sample background, opens notes once,

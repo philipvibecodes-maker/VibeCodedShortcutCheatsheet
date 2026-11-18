@@ -110,6 +110,7 @@ shortcut-cheatsheet-vibed/
 
 - **Font size**: Stored in `data/config.json` (default: 12pt)
 - **Notes fade-in**: Open the **Notes** menu in the notes window and adjust the **Fade-in time** slider (0–1000 ms; default: 120). A dark cover fades away inside Qt to reveal the content smoothly, bypassing GNOME's native window-opacity handling. The title bar and dark window surface appear immediately. At 0 the fade is off. Changes save automatically and apply the next time notes opens. You can also set `notes_fade_in_duration_ms` in `data/config.json`. Native GNOME opening animations remain bypassed.
+- **Notes background**: Choose **Dark translucent** (default), **Soft spotlight**, or **Blurred desktop** in the Notes menu. Background opacity adjusts live from 0–100% (default 60%); styles apply on the next opening. Dark styles need no desktop capture.
 - **Shortcuts**: Stored in `data/<app_name>.json`. The app name is the `wm_class` on Linux (e.g. `brave-browser`) and the executable name on Windows (e.g. `notepad.exe`, `Code.exe`).
 - **Default shortcuts**: Stored in `data/default.json`
 
@@ -148,3 +149,5 @@ Revision 8 polishes the slide and blur: refresh-paced updates, direct cached-ima
 Revision 9 adds **Notes → Animation → Command palette**: a short 18px descent with a subtle content reveal and synchronized backdrop, inspired by IDE command palettes. It defaults to 180 ms when no duration is saved; the existing duration, startup-speed, and blur controls still apply. Choose it once and it stays selected. See the [GNOME recording](docs/animation-review/revision-9/command-palette.mp4) and [frame sequence](docs/animation-review/revision-9/sequence.png).
 
 Revision 10 refines Command palette: a shorter 12px entrance, readable content immediately, and a brief brightness transition that finishes before the movement settles. The duration and startup-speed controls are preserved. [Before/after GNOME recordings](docs/animation-review/revision-10/README.md).
+
+Revision 11 adds alternative background treatments and makes the dark translucent scrim the default. Your saved opacity is preserved. [Compare the styles and GNOME recordings](docs/animation-review/revision-11/README.md).

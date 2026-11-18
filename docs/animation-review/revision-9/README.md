@@ -16,5 +16,5 @@ above was captured after that fix and inspected frame by frame.
 Reproduce from the desktop session:
 
 ```sh
-QT_QPA_PLATFORM=xcb venv/bin/python tools/record_notes_animation.py /tmp/palette-review --strategy palette --duration 180 --speed 3
+QT_QPA_PLATFORM=xcb venv/bin/python tools/record_notes_animation.py /tmp/palette-review --strategy palette --duration 180 --speed 3 --background blur
 ```
