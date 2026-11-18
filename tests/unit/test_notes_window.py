@@ -276,3 +276,25 @@ def test_fade_slider_in_notes_menu_supports_keyboard(qtbot, temp_data_dir):
     assert data_storage.get_notes_fade_in_duration_ms() == 0
     assert "Off" in window.fade_duration_label.text()
     menu.close()
+
+
+def test_slide_strategy_moves_down_and_persists(qtbot, temp_data_dir):
+    window = _make_window(qtbot)
+    window.animation_actions['slide'].trigger()
+    assert data_storage.get_notes_animation_strategy() == 'slide'
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window.show()
+    target = window._slide_target
+    assert window.y() < target.y()
+    assert not window._fade_overlay.isVisible()
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
+    window._fade_in.setCurrentTime(500)
+    assert window.y() == round((window._slide_start_y + target.y()) / 2)
+    window._fade_in.setCurrentTime(1000)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert window.pos() == target
+    window.close()
+    restored = _make_window(qtbot)
+    assert restored.animation_actions['slide'].isChecked()
+    restored.animation_actions['fade'].trigger()
+    assert data_storage.get_notes_animation_strategy() == 'fade'

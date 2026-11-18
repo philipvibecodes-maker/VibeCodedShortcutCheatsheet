@@ -125,3 +125,5 @@ See `CLAUDE.md` for development guidelines and architectural decisions.
 ## License
 
 [Add your license here]
+
+Choose **Notes → Animation → Fade reveal** or **Slide from top** in the notes window. The choice is saved as `notes_animation_strategy` (`fade` or `slide`). Both modes use the **Animation duration** slider and apply on the next opening; 0 disables animation. Slide moves the whole window down from above the screen to its centered position.

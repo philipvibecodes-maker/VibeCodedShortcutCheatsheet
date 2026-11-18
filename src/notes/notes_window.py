@@ -1,7 +1,7 @@
 """Large centered window for recording and searching key/value notes under topics."""
 
 from PyQt6.QtCore import QEasingCurve, QEvent, QTimeLine, Qt, QTimer
-from PyQt6.QtGui import QColor, QFont, QKeySequence, QPainter, QShortcut
+from PyQt6.QtGui import QActionGroup, QColor, QFont, QKeySequence, QPainter, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
@@ -34,11 +34,13 @@ from src.data_storage import (
     delete_topic_entry,
     get_all_shortcuts,
     get_notes_fade_in_duration_ms,
+    get_notes_animation_strategy,
     get_notes_font_size,
     get_notes_last_search,
     get_notes_last_topic,
     get_topics,
     save_notes_fade_in_duration_ms,
+    save_notes_animation_strategy,
     save_notes_font_size,
     save_notes_last_search,
     save_notes_last_topic,
@@ -128,17 +130,20 @@ class _FadeOverlay(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         self.progress = 1.0
+        self._cover_color = QColor(43, 43, 43)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.hide()
 
     def setProgress(self, progress):
         self.progress = progress
+        self._cover_color.setAlpha(round(255 * (1 - progress)))
         self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(event.rect(), QColor(43, 43, 43, round(255 * (1 - self.progress))))
+        painter.fillRect(event.rect(), self._cover_color)
+        painter.end()
 
 
 class EntryDialog(QDialog):
@@ -257,8 +262,10 @@ class NotesWindow(QMainWindow):
         easing = QEasingCurve()
         easing.setCustomType(_fade_easing)
         self._fade_in.setEasingCurve(easing)
-        self._fade_in.valueChanged.connect(self._fade_overlay.setProgress)
-        self._fade_in.finished.connect(self._fade_overlay.hide)
+        self._animation_strategy = get_notes_animation_strategy()
+        self._slide_target = None
+        self._fade_in.valueChanged.connect(self._animate_opening)
+        self._fade_in.finished.connect(self._finish_opening)
         self._fade_pending = False
         self._fade_start_timer = QTimer(self)
         self._fade_start_timer.setSingleShot(True)
@@ -268,6 +275,21 @@ class NotesWindow(QMainWindow):
         self._font_size = get_notes_font_size()
 
         notes_menu = self.menuBar().addMenu("&Notes")
+        strategy_menu = notes_menu.addMenu("&Animation")
+        strategy_group = QActionGroup(self)
+        self._strategy_group = strategy_group
+        strategy_group.setExclusive(True)
+        self.animation_actions = {}
+        for strategy, label in (("fade", "&Fade reveal"), ("slide", "&Slide from top")):
+            action = strategy_menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(strategy == self._animation_strategy)
+            action.setData(strategy)
+            strategy_group.addAction(action)
+            self.animation_actions[strategy] = action
+        strategy_group.triggered.connect(
+            lambda action: save_notes_animation_strategy(action.data())
+        )
         fade_controls = QWidget()
         fade_layout = QVBoxLayout(fade_controls)
         self.fade_duration_label = QLabel()
@@ -277,10 +299,10 @@ class NotesWindow(QMainWindow):
         self.fade_duration_slider.setSingleStep(10)
         self.fade_duration_slider.setPageStep(100)
         self.fade_duration_slider.setMinimumWidth(240)
-        self.fade_duration_slider.setAccessibleName("Fade-in time")
+        self.fade_duration_slider.setAccessibleName("Animation duration")
         fade_controls.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         fade_controls.setFocusProxy(self.fade_duration_slider)
-        self.fade_duration_slider.setToolTip("Applies next time notes opens. 0 disables the fade.")
+        self.fade_duration_slider.setToolTip("Applies next time notes opens. 0 disables the animation.")
         # Persist once per drag, while still displaying the time as it moves.
         self.fade_duration_slider.setTracking(False)
         self.fade_duration_slider.sliderMoved.connect(self._update_fade_label)
@@ -636,7 +658,7 @@ class NotesWindow(QMainWindow):
 
     def _update_fade_label(self, duration):
         value = f"{duration} ms" if duration else "Off"
-        self.fade_duration_label.setText(f"&Fade-in time: {value}")
+        self.fade_duration_label.setText(f"&Animation duration: {value}")
 
     def _save_fade_duration(self, duration):
         self._update_fade_label(duration)
@@ -655,11 +677,13 @@ class NotesWindow(QMainWindow):
         self._fade_in.stop()
         self._fade_start_timer.stop()
         duration = get_notes_fade_in_duration_ms()
+        self._animation_strategy = get_notes_animation_strategy()
+        self.animation_actions[self._animation_strategy].setChecked(True)
         self._fade_pending = bool(duration)
         self._fade_in.setDuration(max(1, duration))
         self._sync_fade_controls(duration)
         self._fade_overlay.setProgress(0.0 if duration else 1.0)
-        self._fade_overlay.setVisible(bool(duration))
+        self._fade_overlay.setVisible(bool(duration) and self._animation_strategy == "fade")
         self._fade_overlay.raise_()
         super().showEvent(event)
         screen = QApplication.primaryScreen().availableGeometry()
@@ -668,6 +692,10 @@ class NotesWindow(QMainWindow):
             screen.x() + (screen.width() - self.width()) // 2,
             screen.y() + (screen.height() - self.height()) // 2,
         )
+        self._slide_target = self.pos()
+        self._slide_start_y = screen.top() - self.frameGeometry().height()
+        if duration and self._animation_strategy == "slide":
+            self.move(self._slide_target.x(), self._slide_start_y)
         self._fade_overlay.setGeometry(self.rect())
         self.search_edit.setFocus()
         handle = self.windowHandle()
@@ -683,6 +711,19 @@ class NotesWindow(QMainWindow):
             self._fade_pending = False
             self._fade_in.start()
 
+    def _animate_opening(self, progress):
+        if self._animation_strategy == "slide" and self._slide_target is not None:
+            y = round(self._slide_start_y +
+                      (self._slide_target.y() - self._slide_start_y) * progress)
+            self.move(self._slide_target.x(), y)
+        else:
+            self._fade_overlay.setProgress(progress)
+
+    def _finish_opening(self):
+        self._fade_overlay.hide()
+        if self._animation_strategy == "slide" and self._slide_target is not None:
+            self.move(self._slide_target)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, "_fade_overlay"):
@@ -693,6 +734,7 @@ class NotesWindow(QMainWindow):
         self._fade_start_timer.stop()
         self._fade_pending = False
         self._fade_in.stop()
+        self._finish_opening()
         self._fade_overlay.hide()
         self._fade_overlay.setProgress(1.0)
         super().hideEvent(event)

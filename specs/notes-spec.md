@@ -15,3 +15,5 @@ The application has a notes window, separate from the cheatsheet window, that wi
 - adjust font size with Ctrl+plus / Ctrl+minus, persisted to `config.json` as `notes_font_size`.
 - close on Ctrl+Q and when the window loses focus (tabbing away).
 - persist topics to `data/topics.json` immediately on every change.
+
+- offer exclusive Fade reveal and Slide from top choices under Notes → Animation, persisted as `notes_animation_strategy` (default `fade`, alternative `slide`). Both use the duration slider; changes apply on the next opening. Slide moves the fully opaque window from above the available screen to its centered position with the same easing, and restores the final position when interrupted.
