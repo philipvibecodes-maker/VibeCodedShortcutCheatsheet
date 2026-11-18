@@ -20,6 +20,7 @@ from src.notes.notes_window import NotesWindow
 parser = argparse.ArgumentParser()
 parser.add_argument('output', type=Path)
 parser.add_argument('--duration', type=int, default=360)
+parser.add_argument('--strategy', choices=['fade', 'slide', 'palette'], default='slide')
 parser.add_argument('--speed', type=int, default=3)
 args = parser.parse_args()
 args.output.mkdir(parents=True, exist_ok=True)
@@ -28,7 +29,7 @@ app.setQuitOnLastWindowClosed(False)
 temporary = tempfile.TemporaryDirectory()
 data_storage.get_data_dir = lambda: Path(temporary.name)
 (Path(temporary.name) / 'config.json').write_text(json.dumps({
-    'notes_animation_strategy': 'slide', 'notes_fade_in_duration_ms': args.duration,
+    'notes_animation_strategy': args.strategy, 'notes_fade_in_duration_ms': args.duration,
     'notes_animation_startup_speed': args.speed, 'notes_backdrop_opacity': 58,
 }))
 for topic in ('Daily notes', 'Git commands', 'Project ideas'):

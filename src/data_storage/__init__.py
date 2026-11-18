@@ -137,9 +137,9 @@ def save_notes_font_size(size: int) -> None:
 
 
 def get_notes_fade_in_duration_ms() -> int:
-    """Return duration (0 disables it); default to 120 ms fade / 360 ms slide."""
+    """Return duration (0 disables it); default to 120 ms fade / 360 ms slide / 180 ms palette."""
     config = _get_config()
-    default = 360 if config.get("notes_animation_strategy") == "slide" else 120
+    default = {"slide": 360, "palette": 180}.get(config.get("notes_animation_strategy"), 120)
     duration = config.get("notes_fade_in_duration_ms", default)
     # Reject malformed values and bound the duration to keep opening responsive.
     if type(duration) is not int or not 0 <= duration <= 1000:
@@ -154,7 +154,7 @@ def save_notes_fade_in_duration_ms(duration: int) -> None:
 
 def get_notes_animation_strategy() -> str:
     strategy = _get_config().get("notes_animation_strategy", "fade")
-    return strategy if strategy in ("fade", "slide") else "fade"
+    return strategy if strategy in ("fade", "slide", "palette") else "fade"
 
 
 def save_notes_animation_strategy(strategy: str) -> None:

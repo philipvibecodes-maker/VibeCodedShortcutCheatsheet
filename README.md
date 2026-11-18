@@ -144,3 +144,5 @@ Revision 5 adds **Background blur opacity** in the Notes menu (0–100%, default
 Revision 6 cuts the notes window out of the backdrop's native mask, keeping notes sharp regardless of stacking order. The clear area follows sliding, dragging, and resizing.
 
 Revision 8 polishes the slide and blur: refresh-paced updates, direct cached-image compositing, and no dark blur halo at the screen edges. With no duration saved, slides default to 360 ms and fades to 120 ms; explicit settings are preserved. See [GNOME recordings and screenshots](docs/animation-review/revision-8/README.md) for the before/after review and a reproducible capture command.
+
+Revision 9 adds **Notes → Animation → Command palette**: a short 18px descent with a subtle content reveal and synchronized backdrop, inspired by IDE command palettes. It defaults to 180 ms when no duration is saved; the existing duration, startup-speed, and blur controls still apply. Choose it once and it stays selected. See the [GNOME recording](docs/animation-review/revision-9/command-palette.mp4) and [frame sequence](docs/animation-review/revision-9/sequence.png).

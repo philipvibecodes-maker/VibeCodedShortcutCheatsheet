@@ -447,3 +447,41 @@ def test_slide_has_longer_default_but_preserves_explicit_duration(temp_data_dir)
     assert data_storage.get_notes_fade_in_duration_ms() == 120
     data_storage.save_notes_fade_in_duration_ms(0)
     assert data_storage.get_notes_fade_in_duration_ms() == 0
+
+
+def test_command_palette_combines_short_descent_and_reveal(qtbot, temp_data_dir):
+    window = _make_window(qtbot)
+    window.animation_actions['palette'].trigger()
+    assert data_storage.get_notes_animation_strategy() == 'palette'
+    assert data_storage.get_notes_fade_in_duration_ms() == 180
+    window.show()
+    surface = window._slide_surface
+    native_id = int(surface.winId())
+    target = window._slide_target
+    assert surface.y() == target.y() - 18
+    assert window._fade_overlay.isVisible()
+    assert window._fade_overlay.progress == 0.35
+    assert window.windowOpacity() == 1
+    window._fade_in.setCurrentTime(90)
+    assert surface.y() == round(target.y() - 18 + 18 * 0.875)
+    assert window._fade_overlay.progress == pytest.approx(0.35 + 0.65 * 0.875)
+    qtbot.keyClicks(window.search_edit, 'command')
+    window._fade_in.setCurrentTime(180)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert surface.pos() == target
+    assert int(surface.winId()) == native_id
+    assert not window._fade_overlay.isVisible()
+    assert window.search_edit.text() == 'command'
+    window.close()
+    restored = _make_window(qtbot)
+    assert restored.animation_actions['palette'].isChecked()
+
+
+def test_command_palette_can_disable_animation(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy('palette')
+    data_storage.save_notes_fade_in_duration_ms(0)
+    window = _make_window(qtbot)
+    window.show()
+    assert window._slide_surface is None
+    assert window._fade_in.state() == QTimeLine.State.NotRunning
+    assert not window._fade_overlay.isVisible()

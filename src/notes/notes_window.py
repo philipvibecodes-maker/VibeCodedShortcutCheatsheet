@@ -3,7 +3,7 @@
 from functools import partial
 
 from PyQt6.QtCore import QEasingCurve, QEvent, QPoint, QTimeLine, Qt, QTimer
-from PyQt6.QtGui import QActionGroup, QColor, QFont, QKeySequence, QPalette, QRegion, QShortcut
+from PyQt6.QtGui import QActionGroup, QColor, QFont, QKeySequence, QPainter, QRegion, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -236,9 +236,11 @@ class _FadeOverlay(QWidget):
 
     def __init__(self, parent):
         super().__init__(parent)
+        # Keep the Python owner alive during callbacks from Qt's paint loop.
+        self._owner = parent
         self.progress = 1.0
         self._cover_color = QColor(43, 43, 43)
-        self.setAutoFillBackground(True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.hide()
@@ -246,10 +248,12 @@ class _FadeOverlay(QWidget):
     def setProgress(self, progress):
         self.progress = progress
         self._cover_color.setAlpha(round(255 * (1 - progress)))
-        palette = self.palette()
-        palette.setColor(QPalette.ColorRole.Window, self._cover_color)
-        self.setPalette(palette)
         self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(event.rect(), self._cover_color)
+        painter.end()
 
 
 class EntryDialog(QDialog):
@@ -397,7 +401,8 @@ class NotesWindow(QMainWindow):
         self._strategy_group = strategy_group
         strategy_group.setExclusive(True)
         self.animation_actions = {}
-        for strategy, label in (("fade", "&Fade reveal"), ("slide", "&Slide from top")):
+        for strategy, label in (("fade", "&Fade reveal"), ("slide", "&Slide from top"),
+                                ("palette", "&Command palette")):
             action = strategy_menu.addAction(label)
             action.setCheckable(True)
             action.setChecked(strategy == self._animation_strategy)
@@ -867,7 +872,7 @@ class NotesWindow(QMainWindow):
             self._opening_progress = 0.0 if get_notes_fade_in_duration_ms() else 1.0
             self._create_backdrop()
             self._update_backdrop()
-        if (get_notes_animation_strategy() == "slide"
+        if (get_notes_animation_strategy() in ("slide", "palette")
                 and get_notes_fade_in_duration_ms() and not self.isVisible()):
             self._prepare_opening()
             # An override-redirect surface is not repositioned by GNOME.
@@ -921,7 +926,11 @@ class NotesWindow(QMainWindow):
         self._fade_in.setDuration(max(1, duration))
         self._sync_fade_controls(duration)
         self._fade_overlay.setProgress(0.0 if duration else 1.0)
-        self._fade_overlay.setVisible(bool(duration) and self._animation_strategy == "fade")
+        if duration and self._animation_strategy == "palette":
+            # Keep the search and results recognizable on the first frame,
+            # rather than briefly presenting an empty dark rectangle.
+            self._fade_overlay.setProgress(0.35)
+        self._fade_overlay.setVisible(bool(duration) and self._animation_strategy in ("fade", "palette"))
         self._fade_overlay.raise_()
         display = self.screen() or QApplication.primaryScreen()
         screen = display.availableGeometry()
@@ -936,7 +945,11 @@ class NotesWindow(QMainWindow):
         # Use the physical screen edge, not the work area below GNOME's bar.
         # Leave a margin for shadows and decorations that arrive during mapping.
         self._slide_start_y = display.geometry().top() - self.frameGeometry().height() - 32
-        if duration and self._animation_strategy == "slide":
+        if self._animation_strategy == "palette":
+            # IDE palettes emerge close to their destination, without a long
+            # offscreen journey or an opacity request to the compositor.
+            self._slide_start_y = self._slide_target.y() - 18
+        if duration and self._animation_strategy in ("slide", "palette"):
             self.move(self._slide_target.x(), self._slide_start_y)
         else:
             self.move(self._slide_target)
@@ -945,13 +958,14 @@ class NotesWindow(QMainWindow):
 
     def _animate_opening(self, progress):
         self._opening_progress = progress
-        if self._animation_strategy == "slide" and self._slide_target is not None:
+        if self._animation_strategy in ("slide", "palette") and self._slide_target is not None:
             y = round(self._slide_start_y +
                       (self._slide_target.y() - self._slide_start_y) * progress)
             surface = self._slide_surface or self
             surface.move(self._slide_target.x(), y)
-        else:
-            self._fade_overlay.setProgress(progress)
+        if self._animation_strategy in ("fade", "palette"):
+            reveal = 0.35 + 0.65 * progress if self._animation_strategy == "palette" else progress
+            self._fade_overlay.setProgress(reveal)
         self._update_backdrop()
 
     def _finish_opening(self, show_destination=True):
@@ -979,7 +993,7 @@ class NotesWindow(QMainWindow):
             surface.deleteLater()
             self._slide_handoff = False
         self._fade_overlay.hide()
-        if self._animation_strategy == "slide" and self._slide_target is not None:
+        if self._animation_strategy in ("slide", "palette") and self._slide_target is not None:
             self.move(self._slide_target)
 
     def resizeEvent(self, event):
