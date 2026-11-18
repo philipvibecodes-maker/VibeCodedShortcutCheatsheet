@@ -114,7 +114,6 @@ def test_global_edit_and_readonly_shortcuts(notes, qtbot):
     assert storage.get_topics()['beta'][0]['key'] == 'Renamed'
     notes.search_edit.setText('shortcut')
     assert not notes.edit_entry_btn.isEnabled()
-    assert not notes.edit_value_btn.isEnabled()
     notes._edit_value()
     assert notes._active_editor is None
     notes._copy_value()
@@ -164,19 +163,35 @@ def test_layout_switch_keeps_active_edit_and_close_commits(notes, qtbot):
     assert storage.get_topics()['alpha'][0]['key'] == 'Saved on close'
 
 
-def test_plain_typing_and_double_click_do_not_edit(notes, qtbot):
+def test_double_click_and_enter_edit_focused_cells(notes, qtbot):
     notes.table.setFocus()
     qtbot.keyClicks(notes.table, 'x')
-    qtbot.mouseDClick(notes.table.viewport(), Qt.MouseButton.LeftButton,
-                     pos=notes.table.visualItemRect(notes.table.item(0, 0)).center())
     assert notes._active_editor is None
-    notes._edit_entry()
+    item = notes.table.item(0, 0)
+    notes.table.setCurrentItem(item)
+    position = notes.table.visualItemRect(item).center()
+    qtbot.mouseClick(notes.table.viewport(), Qt.MouseButton.LeftButton, pos=position)
+    qtbot.mouseDClick(notes.table.viewport(), Qt.MouseButton.LeftButton, pos=position)
+    assert notes._active_editor is not None
     _, editor, _ = notes._active_editor
     editor.setText('abc')
     editor.setCursorPosition(1)
     qtbot.keyClick(editor, Qt.Key.Key_Delete)
     assert editor.text() == 'ac'
     assert len(storage.get_topics()['alpha']) == 2
+    notes._escape()
+    qtbot.wait(10)
+    notes.table.setCurrentCell(0, 1)
+    qtbot.keyClick(notes.table, Qt.Key.Key_Return)
+    assert isinstance(notes._active_editor[1], QPlainTextEdit)
+    notes._escape()
+    qtbot.wait(10)
+
+
+def test_edit_action_uses_current_value_cell(notes):
+    notes.table.setCurrentCell(0, 1)
+    notes.edit_entry_btn.click()
+    assert isinstance(notes._active_editor[1], QPlainTextEdit)
 
 
 def test_font_changes_retain_readable_preview(notes, qtbot):

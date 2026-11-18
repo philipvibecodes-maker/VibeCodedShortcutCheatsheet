@@ -574,7 +574,7 @@ class NotesWindow(QMainWindow):
         self._multiline_delegate = NotesEditDelegate(self.table, self, multiline=True)
         self._key_delegate = NotesEditDelegate(self.table, self)
         self.table.setEditTriggers(
-            QTableWidget.EditTrigger.NoEditTriggers
+            QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.EditKeyPressed
         )
         self.table.itemChanged.connect(self._on_item_changed)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -622,10 +622,6 @@ class NotesWindow(QMainWindow):
         self.delete_entry_btn = QPushButton("De&lete entry")
         self.delete_entry_btn.clicked.connect(self._delete_entry)
         buttons.addWidget(self.delete_entry_btn)
-        self.edit_value_btn = QPushButton("Edit value")
-        self.edit_value_btn.clicked.connect(self._edit_value)
-        buttons.addWidget(self.edit_value_btn)
-        self.edit_entry_btn.setText("Edit key")
         manage = QToolButton()
         manage.setText("Manage")
         manage.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -646,7 +642,7 @@ class NotesWindow(QMainWindow):
         self.management = QWidget()
         self.management.setLayout(buttons)
         layout.addWidget(self.management)
-        self.feedback = QLabel("↑↓ Select   Enter Read   F2 Edit key   Shift+F2 Edit value   Ctrl+Shift+C Copy   Esc Close")
+        self.feedback = QLabel("↑↓ Select   Double-click / Enter Edit cell   Ctrl+Shift+C Copy   Esc Close")
         self.feedback.setWordWrap(True)
         layout.addWidget(self.feedback)
         self._feedback_timer = QTimer(self)
@@ -664,8 +660,6 @@ class NotesWindow(QMainWindow):
         QShortcut(QKeySequence("Alt+I"), self, activated=self._edit_entry)
         QShortcut(QKeySequence("Alt+D"), self, activated=self._delete_topic)
         QShortcut(QKeySequence("Ctrl+N"), self, activated=self._new_entry)
-        QShortcut(QKeySequence("F2"), self, activated=self._edit_entry)
-        QShortcut(QKeySequence("Shift+F2"), self, activated=self._edit_value)
         QShortcut(QKeySequence("Ctrl+Shift+C"), self, activated=self._copy_value)
         QShortcut(QKeySequence("Escape"), self, activated=self._escape)
         self.search_edit.installEventFilter(self)
@@ -716,7 +710,6 @@ class NotesWindow(QMainWindow):
         topic, _ = self._selected_entry()
         self.edit_entry_btn.setEnabled(topic is not None)
         self.delete_entry_btn.setEnabled(topic is not None)
-        self.edit_value_btn.setEnabled(topic is not None)
 
     def _copy_value(self):
         value = self._selected_value()
@@ -726,7 +719,7 @@ class NotesWindow(QMainWindow):
             self._feedback_timer.start()
 
     def _restore_feedback(self):
-        self.feedback.setText("↑↓ Select   Enter Read   F2 Edit key   Shift+F2 Edit value   Ctrl+Shift+C Copy   Esc Close")
+        self.feedback.setText("↑↓ Select   Double-click / Enter Edit cell   Ctrl+Shift+C Copy   Esc Close")
 
     def _commit_editor(self):
         if not self._active_editor:
@@ -880,7 +873,6 @@ class NotesWindow(QMainWindow):
         topic, index = self._selected_entry()
         self.edit_entry_btn.setEnabled(topic is not None)
         self.delete_entry_btn.setEnabled(topic is not None)
-        self.edit_value_btn.setEnabled(topic is not None)
         self.delete_topic_btn.setEnabled(not self._is_readonly_topic(self._current_topic()))
 
     # --- actions ----------------------------------------------------------
@@ -977,8 +969,9 @@ class NotesWindow(QMainWindow):
         topic, index = self._selected_entry()
         if topic is None:
             return
-        # open the in-place editor on the key cell of the selected row
-        col = 1 if self.table.columnCount() == 3 else 0
+        # Edit the focused cell; the topic context column is read-only.
+        key_col = 1 if self.table.columnCount() == 3 else 0
+        col = max(key_col, self.table.currentColumn())
         self.table.setFocus()
         self.table.edit(self.table.model().index(self.table.currentRow(), col))
 
@@ -1045,7 +1038,10 @@ class NotesWindow(QMainWindow):
         if event.type() == QEvent.Type.KeyPress and obj in (self.search_edit, self.table):
             if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 if self.table.rowCount():
-                    self.preview.setFocus()
+                    if obj is self.table:
+                        self._edit_entry()
+                    else:
+                        self.preview.setFocus()
                 return True
             if obj is self.search_edit and event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
                 row = self.table.currentRow() + (1 if event.key() == Qt.Key.Key_Down else -1)

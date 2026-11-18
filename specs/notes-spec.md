@@ -62,3 +62,13 @@ The application has a notes window, separate from the cheatsheet window, that wi
   settings when available, suppressing entrance reveal/translation. Manual Off remains available.
   No animation is added to result updates or dismissal.
 - Review artifacts and reproduction instructions: `docs/notes-search-review/revision-14/README.md`.
+
+## Revision 15 — restore direct cell editing
+
+- Restore double-click and standard Qt edit-key triggers for editable table cells. Enter while
+  the table is focused edits the current cell; Enter in search continues to focus the preview.
+  The Edit entry button also edits the current cell, choosing the key if the topic column is
+  selected. Remove the dedicated F2/Shift+F2 shortcuts and separate key/value edit buttons.
+- Retain inline validation, Escape cancellation, Ctrl+Enter multiline commit, focus-loss
+  protection, the full-value preview, and read-only shortcut/topic context cells.
+- Live app testing and new screenshots are deferred at the user's request.
