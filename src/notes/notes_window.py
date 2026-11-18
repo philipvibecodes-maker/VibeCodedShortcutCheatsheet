@@ -1,7 +1,7 @@
 """Large centered window for recording and searching key/value notes under topics."""
 
 from PyQt6.QtCore import QEasingCurve, QEvent, QTimeLine, Qt, QTimer
-from PyQt6.QtGui import QFont, QKeySequence, QShortcut
+from PyQt6.QtGui import QColor, QFont, QKeySequence, QPainter, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
@@ -122,6 +122,25 @@ def _fade_easing(progress):
     return progress * progress * (3.0 - 2.0 * progress)
 
 
+class _FadeOverlay(QWidget):
+    """Reveal live content by fading a dark cover, without native opacity."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.progress = 1.0
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.hide()
+
+    def setProgress(self, progress):
+        self.progress = progress
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(event.rect(), QColor(43, 43, 43, round(255 * (1 - self.progress))))
+
+
 class EntryDialog(QDialog):
     """Dialog for recording a key -> multi-line text entry."""
 
@@ -229,7 +248,8 @@ class NotesWindow(QMainWindow):
         # immediately; this X11 hint also works under XWayland and is ignored
         # on other platforms. Keep the normal Qt title bar and window controls.
         self.setAttribute(Qt.WidgetAttribute.WA_X11NetWmWindowTypeUtility)
-        # Animate only the native window opacity; no widget effects or repaints.
+        # Fade a simple painted cover inside Qt; GNOME sees an opaque window.
+        self._fade_overlay = _FadeOverlay(self)
         self._fade_in = QTimeLine(120, self)
         # Use a finer cadence than Qt's shared property-animation driver.
         # QTimeLine uses elapsed time, so delayed ticks don't extend the fade.
@@ -237,8 +257,8 @@ class NotesWindow(QMainWindow):
         easing = QEasingCurve()
         easing.setCustomType(_fade_easing)
         self._fade_in.setEasingCurve(easing)
-        self._fade_in.valueChanged.connect(self.setWindowOpacity)
-        self._fade_in.finished.connect(lambda: self.setWindowOpacity(1.0))
+        self._fade_in.valueChanged.connect(self._fade_overlay.setProgress)
+        self._fade_in.finished.connect(self._fade_overlay.hide)
         self._fade_pending = False
         self._fade_start_timer = QTimer(self)
         self._fade_start_timer.setSingleShot(True)
@@ -638,8 +658,9 @@ class NotesWindow(QMainWindow):
         self._fade_pending = bool(duration)
         self._fade_in.setDuration(max(1, duration))
         self._sync_fade_controls(duration)
-        # Set opacity before mapping to avoid a fully opaque first frame.
-        self.setWindowOpacity(0.0 if duration else 1.0)
+        self._fade_overlay.setProgress(0.0 if duration else 1.0)
+        self._fade_overlay.setVisible(bool(duration))
+        self._fade_overlay.raise_()
         super().showEvent(event)
         screen = QApplication.primaryScreen().availableGeometry()
         self.resize(int(screen.width() * 0.7), int(screen.height() * 0.7))
@@ -647,6 +668,7 @@ class NotesWindow(QMainWindow):
             screen.x() + (screen.width() - self.width()) // 2,
             screen.y() + (screen.height() - self.height()) // 2,
         )
+        self._fade_overlay.setGeometry(self.rect())
         self.search_edit.setFocus()
         handle = self.windowHandle()
         if handle is not None:
@@ -661,12 +683,18 @@ class NotesWindow(QMainWindow):
             self._fade_pending = False
             self._fade_in.start()
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "_fade_overlay"):
+            self._fade_overlay.setGeometry(self.rect())
+
     def hideEvent(self, event):
         # Closing/toggling during the fade must leave no running animation.
         self._fade_start_timer.stop()
         self._fade_pending = False
         self._fade_in.stop()
-        self.setWindowOpacity(1.0)
+        self._fade_overlay.hide()
+        self._fade_overlay.setProgress(1.0)
         super().hideEvent(event)
 
     def changeEvent(self, event):

@@ -116,13 +116,16 @@ def test_fade_in_progresses_and_finishes(qtbot, temp_data_dir):
     window = _make_window(qtbot)
     window.show()
     assert window._fade_in.duration() == 120
-    assert window.windowOpacity() == 0.0
-    qtbot.waitUntil(lambda: 0.0 < window.windowOpacity() < 1.0)
+    assert window.windowOpacity() == 1.0
+    assert window._fade_overlay.isVisible()
+    assert window._fade_overlay.progress == 0.0
+    qtbot.waitUntil(lambda: 0.0 < window._fade_overlay.progress < 1.0)
     # The window remains interactive while fading.
     qtbot.keyClicks(window.search_edit, "query")
     assert window.search_edit.text() == "query"
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
-    assert window.windowOpacity() == 1.0
+    assert window._fade_overlay.progress == 1.0
+    assert not window._fade_overlay.isVisible()
 
 
 @pytest.mark.parametrize("hide_method", ["hide", "close"])
@@ -132,12 +135,14 @@ def test_interrupted_fade_stops_and_reopens(qtbot, temp_data_dir, hide_method):
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
     getattr(window, hide_method)()
     assert window._fade_in.state() == QTimeLine.State.NotRunning
-    assert window.windowOpacity() == 1.0
+    assert window._fade_overlay.progress == 1.0
+    assert not window._fade_overlay.isVisible()
     window.show()
-    assert window.windowOpacity() == 0.0
+    assert window._fade_overlay.progress == 0.0
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
-    assert window.windowOpacity() == 1.0
+    assert window._fade_overlay.progress == 1.0
+    assert not window._fade_overlay.isVisible()
 
 
 def test_fade_waits_for_exposure_then_uses_full_smooth_duration(
@@ -150,7 +155,7 @@ def test_fade_waits_for_exposure_then_uses_full_smooth_duration(
     monkeypatch.setattr(handle, "isExposed", lambda: exposed)
     window.show()
     qtbot.wait(150)
-    assert window.windowOpacity() == 0.0
+    assert window._fade_overlay.progress == 0.0
     assert window._fade_in.state() == QTimeLine.State.NotRunning
     assert window._fade_in.currentTime() == 0
 
@@ -160,7 +165,7 @@ def test_fade_waits_for_exposure_then_uses_full_smooth_duration(
     for elapsed, expected in ((0, 0), (250, 0.15625), (500, 0.5),
                               (750, 0.84375), (1000, 1)):
         window._fade_in.setCurrentTime(elapsed)
-        assert window.windowOpacity() == pytest.approx(expected, abs=0.005)
+        assert window._fade_overlay.progress == pytest.approx(expected, abs=0.005)
     qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
 
 
@@ -172,7 +177,57 @@ def test_hiding_before_exposure_cancels_pending_fade(qtbot, temp_data_dir):
     assert not window._fade_pending
     assert not window._fade_start_timer.isActive()
     assert window._fade_in.state() == QTimeLine.State.NotRunning
+    assert window._fade_overlay.progress == 1.0
+    assert not window._fade_overlay.isVisible()
+
+
+def test_fade_reveals_rendered_content_without_native_opacity(
+        qtbot, temp_data_dir, monkeypatch):
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    data_storage.add_topic("Example topic")
+    window = _make_window(qtbot)
+
+    def reject_native_opacity(_value):
+        pytest.fail("The fade must not use compositor window opacity")
+
+    monkeypatch.setattr(window, "setWindowOpacity", reject_native_opacity)
+    window.show()
+    # Render deterministic frames without advancing the animation's clock.
+    covered = window.grab().toImage()
+    window._fade_overlay.setProgress(0.5)
+    halfway = window.grab().toImage()
+    window._fade_overlay.hide()
+    revealed = window.grab().toImage()
+    changed_pixels = 0
+    for y in range(5, covered.height(), 15):
+        for x in range(5, covered.width(), 15):
+            start = covered.pixelColor(x, y).getRgb()[:3]
+            middle = halfway.pixelColor(x, y).getRgb()[:3]
+            end = revealed.pixelColor(x, y).getRgb()[:3]
+            assert start == (43, 43, 43)
+            if start != end:
+                changed_pixels += 1
+                assert middle == pytest.approx(
+                    tuple((a + b) / 2 for a, b in zip(start, end)), abs=2)
+    assert changed_pixels > 0
     assert window.windowOpacity() == 1.0
+    window.hide()
+
+
+def test_fade_cover_follows_resize_and_passes_mouse_input(qtbot, temp_data_dir):
+    data_storage.add_topic("alpha")
+    data_storage.add_topic("beta")
+    window = _make_window(qtbot)
+    window.show()
+    window.resize(600, 400)
+    assert window._fade_overlay.geometry() == window.rect()
+    item = window.topic_list.item(1)
+    position = window.topic_list.viewport().mapTo(
+        window, window.topic_list.visualItemRect(item).center())
+    assert window.childAt(position) is window.topic_list.viewport()
+    qtbot.mouseClick(window.topic_list.viewport(), Qt.MouseButton.LeftButton,
+                     pos=window.topic_list.visualItemRect(item).center())
+    assert window._current_topic() == "beta"
 
 
 def test_fade_config_is_reloaded_and_can_disable_animation(qtbot, temp_data_dir):
@@ -184,7 +239,8 @@ def test_fade_config_is_reloaded_and_can_disable_animation(qtbot, temp_data_dir)
     window.hide()
     config.write_text('{"notes_fade_in_duration_ms": 0}')
     window.show()
-    assert window.windowOpacity() == 1.0
+    assert window._fade_overlay.progress == 1.0
+    assert not window._fade_overlay.isVisible()
     assert window._fade_in.state() == QTimeLine.State.NotRunning
     assert window.fade_duration_slider.value() == 0
     assert "Off" in window.fade_duration_label.text()
