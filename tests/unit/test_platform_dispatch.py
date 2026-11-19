@@ -28,8 +28,13 @@ def test_public_api_members_are_callable():
 
 def test_dispatch_matches_current_os():
     if sys.platform.startswith("linux"):
-        from src.platform.linux_gnome import gnome_window_detection
-        assert platform_module.get_focused_window is gnome_window_detection.get_focused_window
+        import os
+        if os.environ.get("XDG_SESSION_TYPE") == "x11":
+            from src.platform.linux_gnome import x11_window_detection
+            assert platform_module.get_focused_window is x11_window_detection.get_focused_window
+        else:
+            from src.platform.linux_gnome import gnome_window_detection
+            assert platform_module.get_focused_window is gnome_window_detection.get_focused_window
     elif sys.platform == "win32":
         from src.platform.windows import window_detection as win_detection
         assert platform_module.get_focused_window is win_detection.get_focused_window

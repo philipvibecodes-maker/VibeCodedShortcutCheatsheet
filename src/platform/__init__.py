@@ -5,16 +5,30 @@ should always import from `src.platform` — never from a concrete backend —
 so platform routing stays in one place.
 """
 
+import os
 import sys
 
 if sys.platform.startswith("linux"):
-    from src.platform.linux_gnome.gnome_window_detection import (
-        is_platform_supported,
-        get_open_windows,
-        get_open_app_names,
-        get_focused_window,
-        get_focused_app_name,
-    )
+    if os.environ.get("XDG_SESSION_TYPE") == "x11":
+        # Native X11: EWMH properties via libX11 — no GNOME extension needed.
+        from src.platform.linux_gnome.x11_window_detection import (
+            is_platform_supported,
+            get_open_windows,
+            get_open_app_names,
+            get_focused_window,
+            get_focused_app_name,
+        )
+    else:
+        # Wayland (and unknown sessions): the window-calls GNOME extension
+        # provides detection over DBus. DISPLAY alone is not reliable here —
+        # XWayland sets it while native Wayland windows stay invisible to X11.
+        from src.platform.linux_gnome.gnome_window_detection import (
+            is_platform_supported,
+            get_open_windows,
+            get_open_app_names,
+            get_focused_window,
+            get_focused_app_name,
+        )
     from src.platform.linux_gnome.window_movement import (
         get_work_area,
         get_corner_position,
@@ -42,4 +56,12 @@ __all__ = [
     "get_focused_app_name",
     "get_work_area",
     "get_corner_position",
+    "restore_keyboard_focus",
 ]
+
+
+def restore_keyboard_focus(window_id: int) -> None:
+    """Restore an X11/XWayland window; other Qt backends activate natively."""
+    if sys.platform.startswith("linux"):
+        from src.platform.linux_gnome.x11_window_detection import restore_keyboard_focus as restore
+        restore(window_id)

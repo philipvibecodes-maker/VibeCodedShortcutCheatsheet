@@ -5,6 +5,7 @@ A desktop app that displays keyboard shortcuts for the currently focused applica
 ## Features
 
 - **Auto-updating cheatsheet**: Automatically shows shortcuts for the currently focused application
+- **Running indicator**: A keyboard icon appears in the system tray while the app is running, including when its windows are hidden. On GNOME, AppIndicator/tray support must be enabled for it to appear in the top panel.
 - **Borderless design**: Modern borderless window with rounded corners and dark theme
 - **Font size control**: Adjust font size with Ctrl+ and Ctrl- (8-24pt range)
 - **Corner positioning**: Move window to any corner using arrow keys
@@ -53,6 +54,11 @@ venv\Scripts\pip install PyQt6
 ```
 
 ## Running the Application
+
+The tray icon includes the running revision number (also shown in its tooltip).
+Restart the existing application after updating: another launch forwards to the
+running instance and does not reload its code. Delivered changes increment
+`APP_REVISION` in `src/version.py`; the first numbered update is revision 1.
 
 ```bash
 # Linux — the app must run under XWayland for proper window positioning:
@@ -103,6 +109,8 @@ shortcut-cheatsheet-vibed/
 ## Configuration
 
 - **Font size**: Stored in `data/config.json` (default: 12pt)
+- **Notes fade-in**: Open the **Notes** menu in the notes window and adjust the **Fade-in time** slider (0–1000 ms; default: 120). A dark cover fades away inside Qt to reveal the content smoothly, bypassing GNOME's native window-opacity handling. The title bar and dark window surface appear immediately. At 0 the fade is off. Changes save automatically and apply the next time notes opens. You can also set `notes_fade_in_duration_ms` in `data/config.json`. Native GNOME opening animations remain bypassed.
+- **Notes background**: Choose **Dark translucent** (default), **Soft spotlight**, or **Blurred desktop** in the Notes menu. Background opacity adjusts live from 0–100% (default 60%); styles apply on the next opening. Dark styles need no desktop capture.
 - **Shortcuts**: Stored in `data/<app_name>.json`. The app name is the `wm_class` on Linux (e.g. `brave-browser`) and the executable name on Windows (e.g. `notepad.exe`, `Code.exe`).
 - **Default shortcuts**: Stored in `data/default.json`
 
@@ -123,3 +131,27 @@ See `CLAUDE.md` for development guidelines and architectural decisions.
 ## License
 
 [Add your license here]
+
+Choose **Notes → Animation → Fade reveal** or **Slide from top** in the notes window. The choice is saved as `notes_animation_strategy` (`fade` or `slide`). Both modes use the **Animation duration** slider and apply on the next opening; 0 disables animation. Slide moves the whole window down from above the screen to its centered position.
+
+The Notes menu also has a **Startup speed** control (1–6, default 3). Higher values make either animation progress faster at the start and settle more slowly, while keeping the selected total duration. The setting saves automatically and applies on the next opening. The duration slider ignores arrow keys; drag it with the mouse or use Home/End and Page Up/Page Down.
+
+Starting with revision 2, Slide from top uses a frameless host that bypasses GNOME's window-placement handling. The live notes content slides down from outside the screen. Revision 3 adds a persistent in-app title bar that slides with the content and remains after landing, avoiding a native title-bar pop-in. Drag it to move, double-click to maximize/restore, or use its minimize, maximize, and close buttons. Resize with the bottom-right grip.
+
+Revision 4 keeps that same host after the slide completes, avoiding a window remap and shadow change at the end. In slide mode, Minimize hides notes; use the notes hotkey to reopen them.
+
+Revision 5 adds **Background blur opacity** in the Notes menu (0–100%, default 60%; saved as `notes_backdrop_opacity`). The backdrop fades in with either animation, and opacity adjustments apply immediately. At 0 it is invisible. Clicking the backdrop closes notes. A desktop snapshot is captured and blurred once per opening, kept only in memory, and discarded on close; it does not track desktop changes while notes is open. On systems that block desktop capture (including some GNOME/Wayland configurations), the backdrop uses dimming instead of blur.
+
+Revision 6 cuts the notes window out of the backdrop's native mask, keeping notes sharp regardless of stacking order. The clear area follows sliding, dragging, and resizing.
+
+Revision 8 polishes the slide and blur: refresh-paced updates, direct cached-image compositing, and no dark blur halo at the screen edges. With no duration saved, slides default to 360 ms and fades to 120 ms; explicit settings are preserved. See [GNOME recordings and screenshots](docs/animation-review/revision-8/README.md) for the before/after review and a reproducible capture command.
+
+Revision 9 adds **Notes → Animation → Command palette**: a short 18px descent with a subtle content reveal and synchronized backdrop, inspired by IDE command palettes. It defaults to 180 ms when no duration is saved; the existing duration, startup-speed, and blur controls still apply. Choose it once and it stays selected. See the [GNOME recording](docs/animation-review/revision-9/command-palette.mp4) and [frame sequence](docs/animation-review/revision-9/sequence.png).
+
+Revision 10 refines Command palette: a shorter 12px entrance, readable content immediately, and a brief brightness transition that finishes before the movement settles. The duration and startup-speed controls are preserved. [Before/after GNOME recordings](docs/animation-review/revision-10/README.md).
+
+Revision 11 adds alternative background treatments and makes the dark translucent scrim the default. Your saved opacity is preserved. [Compare the styles and GNOME recordings](docs/animation-review/revision-11/README.md).
+
+Revision 12 separates background fading from the window entrance and desktop focus-color change. **Background fade time** in the Notes menu defaults to 320 ms (0–1000 ms; 0 disables it), starting after a 75 ms focus-settling interval. This setting is independent of window animation duration and startup speed. Blur refreshes the desktop after focus changes, removing notes and their shadow from the new capture. [Focus-change recordings and screenshots](docs/animation-review/revision-12/README.md).
+
+Revision 13 fixes notes dialogs opening behind the animated window: Alt+T/New topic, New entry, and Delete topic confirmation now use the notes host's foreground stacking layer, center over notes, and restore focus afterwards.

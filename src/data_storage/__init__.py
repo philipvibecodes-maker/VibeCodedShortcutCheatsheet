@@ -136,6 +136,75 @@ def save_notes_font_size(size: int) -> None:
     _save_config_value("notes_font_size", size)
 
 
+def get_notes_fade_in_duration_ms() -> int:
+    """Return duration (0 disables it); default to 120 ms fade / 360 ms slide / 180 ms palette."""
+    config = _get_config()
+    default = {"fade": 120, "slide": 360, "palette": 180}.get(config.get("notes_animation_strategy"), 180)
+    duration = config.get("notes_fade_in_duration_ms", default)
+    # Reject malformed values and bound the duration to keep opening responsive.
+    if type(duration) is not int or not 0 <= duration <= 1000:
+        return default
+    return duration
+
+
+def save_notes_fade_in_duration_ms(duration: int) -> None:
+    """Save the notes fade duration, preserving other configuration values."""
+    _save_config_value("notes_fade_in_duration_ms", duration)
+
+
+def get_notes_animation_strategy() -> str:
+    strategy = _get_config().get("notes_animation_strategy", "palette")
+    return strategy if strategy in ("fade", "slide", "palette") else "palette"
+
+
+def save_notes_animation_strategy(strategy: str) -> None:
+    _save_config_value("notes_animation_strategy", strategy)
+
+
+def get_notes_animation_startup_speed() -> int:
+    speed = _get_config().get("notes_animation_startup_speed", 3)
+    return speed if type(speed) is int and 1 <= speed <= 6 else 3
+
+
+def save_notes_animation_startup_speed(speed: int) -> None:
+    _save_config_value("notes_animation_startup_speed", speed)
+
+
+def get_notes_backdrop_opacity() -> int:
+    opacity = _get_config().get("notes_backdrop_opacity", 40)
+    return opacity if type(opacity) is int and 0 <= opacity <= 100 else 40
+
+
+def save_notes_backdrop_opacity(opacity: int) -> None:
+    _save_config_value("notes_backdrop_opacity", opacity)
+
+
+def get_notes_backdrop_style() -> str:
+    style = _get_config().get("notes_backdrop_style", "dim")
+    return style if style in ("dim", "spotlight", "blur") else "dim"
+
+
+def save_notes_backdrop_style(style: str) -> None:
+    _save_config_value("notes_backdrop_style", style)
+
+
+def get_notes_backdrop_fade_duration_ms() -> int:
+    duration = _get_config().get("notes_backdrop_fade_duration_ms", 320)
+    return duration if type(duration) is int and 0 <= duration <= 1000 else 320
+
+
+def save_notes_backdrop_fade_duration_ms(duration: int) -> None:
+    _save_config_value("notes_backdrop_fade_duration_ms", duration)
+
+
+def get_notes_always_show_topics() -> bool:
+    return _get_config().get("notes_always_show_topics", False) is True
+
+
+def save_notes_always_show_topics(value: bool) -> None:
+    _save_config_value("notes_always_show_topics", value)
+
+
 def get_notes_last_topic() -> Optional[str]:
     """Get the topic the notes window last showed, or None if never set."""
     return _get_config().get("notes_last_topic")

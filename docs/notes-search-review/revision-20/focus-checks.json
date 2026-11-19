@@ -1,0 +1,27 @@
+[
+  {
+    "stage": "saved",
+    "actual": 52428857,
+    "expected": 52428857
+  },
+  {
+    "stage": "saved after focus-loss timeout",
+    "actual": 52428857,
+    "expected": 52428857
+  },
+  {
+    "stage": "before real typing",
+    "actual": 52428857,
+    "expected": 52428857
+  },
+  {
+    "stage": "cancelled",
+    "actual": 52428857,
+    "expected": 52428857
+  },
+  {
+    "stage": "cancelled after focus-loss timeout",
+    "actual": 52428857,
+    "expected": 52428857
+  }
+]

@@ -3,6 +3,9 @@
 The application has a notes window, separate from the cheatsheet window, that will
 - open when the user presses the n key while the cheatsheet is focused, or toggle open/closed on the global Ctrl+Shift+\ hotkey (GNOME custom keybinding running `main.py --toggle-notes` on Linux, RegisterHotKey on Windows; both send a `toggle_notes` message over the local socket). Opening notes must not also show the cheatsheet (or the add-shortcuts settings window) — a `--toggle-notes` launch keeps the cheatsheet hidden.
 - be large and centered on the screen.
+- fade in the client content using a painted dark cover that fades away inside Qt (default 120 ms), while continuing to bypass GNOME's opening animation. Keep native window opacity at 100% throughout: the title bar and dark window surface appear immediately. Configure `notes_fade_in_duration_ms` in `data/config.json` (integer 0–1000; 0 disables the fade, invalid values use the default). Read the setting on each opening, stop the fade when hidden, and keep keyboard input available throughout.
+- expose a keyboard-accessible Fade-in time slider in the Notes menu (0–1000 ms, showing Off at 0); save automatically on adjustment, preserving other settings, and apply the duration on the next opening.
+- start the reveal immediately in the show event, without waiting for native exposure, using a cubic ease-out curve over the full configured duration. Begin with immediate visible progress and decelerate smoothly to the final state. Request updates every 8 ms using elapsed time, with no animation timer running after completion or hiding; do not queue an extra start timer. The cover spans the menu and content, follows resizing, passes input through, and is hidden after completion. Avoid native opacity changes, desktop captures, and widget graphics effects.
 - reopen on the topic that was selected when it was last open (persisted to `config.json` as `notes_last_topic`, falling back to the first topic when it no longer exists).
 - let the user record key/value pairs under user-defined topics (e.g. a topic `git` with a row "compare to origin main" and multi-line text as its value).
 - show recorded app shortcuts as read-only topics named `shortcuts/<app_name>` (key = description, value = keys).
@@ -12,3 +15,114 @@ The application has a notes window, separate from the cheatsheet window, that wi
 - adjust font size with Ctrl+plus / Ctrl+minus, persisted to `config.json` as `notes_font_size`.
 - close on Ctrl+Q and when the window loses focus (tabbing away).
 - persist topics to `data/topics.json` immediately on every change.
+
+- offer exclusive Fade reveal and Slide from top choices under Notes → Animation, persisted as `notes_animation_strategy` (default `fade`, alternative `slide`). Both use the duration slider; changes apply on the next opening. Slide moves the fully opaque window from above the available screen to its centered position with the same easing, and restores the final position when interrupted.
+- expose Startup speed (1–6; default 3), saved as `notes_animation_startup_speed` and applied on the next opening to both strategies. Use ease-out progress `1 - (1 - t)^speed`; speed 1 is linear. Invalid saved values fall back to 3. The duration slider must consume all four arrow keys without changing its value; mouse dragging and other slider keys remain available.
+- position slide openings fully above the physical screen edge before the show handler completes, including a 32px decoration/shadow margin. Never move through the centered destination while preparing the opening; use the window's screen and its work area for the final position.
+- revision 2: slide using a temporary frameless X11 override-redirect host, with live Notes widgets embedded for the duration. Bypass window-manager placement while moving from offscreen, then reparent into the normal decorated window at completion. Clean up the host on hide/close and preserve typed content. Revision 3 replaces the native frame with a persistent in-app title bar, kept throughout the slide and handoff. Include drag, double-click maximize/restore, minimize/maximize/close buttons, and a bottom-right resize grip.
+
+- revision 4: retain the exact same native slide host after animation completion, without reparenting, hiding, remapping, or changing flags at landing. Keep shadow treatment stable. Detach and destroy the host only on hide/close. Implement drag and maximize/restore directly on the host; Minimize hides notes for reopening via the hotkey.
+- revision 5: show a separate blurred desktop backdrop behind notes, captured once per opening and blurred at quarter resolution; retain the image only in memory. Composite it using the opening animation's progress and configurable opacity (`notes_backdrop_opacity`, integer 0–100, default 60). Offer a Notes menu slider, without arrow-key adjustment, saving and applying changes immediately. The backdrop never takes focus, closes notes on click, and is removed on hide/close. If capture returns no image, use a dark dimming fallback. Native desktop capture may be restricted by GNOME/Wayland; this is a cached visual backdrop, not live compositor blur. This requested backdrop supersedes the earlier prohibition on desktop captures and graphics effects for that component.
+- revision 6: exclude the complete notes surface, including its title bar, from the backdrop's native window mask. Update the exclusion on animation progress, move, and resize so backdrop blur never overlays notes, regardless of window stacking order.
+- revision 7: normalize the downsampled capture to device-pixel ratio 1 before graphics-scene rendering, whose source rectangle uses physical pixels. Cover the full output at 100%, 125%, 150%, and 200% screen scaling; do not leave a smaller copy in the upper-left quadrant.
+- revision 8: pace animation updates to display refresh (8–33 ms), render the cached backdrop directly without a widget opacity effect, and reuse unchanged exclusion masks. Extend capture edge pixels before blur to avoid a dark screen-edge halo. Default slides without a saved duration to 360 ms; fades retain 120 ms, and explicit durations remain authoritative. Keep a GNOME recording harness and sanitized demo screenshots/recordings for visual review.
+- revision 9: add a persisted `palette` animation strategy (Command palette) alongside fade and slide. Default to 180 ms if no duration is saved. Move down just 18 logical pixels near the centered destination while revealing content from 35% to 100% using the existing eased progress; keep notes interactive and synchronize the backdrop. Retain the same host after completion. Paint the reveal cover directly with a transparent background so it does not become an opaque placeholder under GNOME. Keep existing strategy selection and explicit duration/startup settings intact.
+- revision 10: refine palette motion to 12 logical pixels. Start its content reveal at 85%; finish the remaining 15% with a quadratic ease-out over the first 40% of eased motion progress, then hide the now-transparent cover. Keep the remainder of the motion and backdrop animation running without a change in native surface, layout, or saved settings. Preserve fade and full-screen slide behavior.
+- revision 11: add persisted `notes_backdrop_style` with `dim` (default), `spotlight`, and `blur`. Dark translucent uses a uniform cool near-black scrim; Soft spotlight uses a cached gradient, lighter near the screen center and darker at the edges; neither captures the desktop. Blur retains its cached capture implementation. Expose a style selector marked "next opening" and a shared live opacity slider. Preserve opacity and animation settings, reject invalid saved styles to `dim`, and keep all backgrounds out of notes using the existing mask. Prepare the exclusion before initially showing a background, including with animation disabled.
+- revision 12: give all backdrops an independent linear fade, configured via `notes_backdrop_fade_duration_ms` (integer 0–1000, default 320), with a Notes menu slider that ignores arrow keys. Queue it 75 ms after notes opens to distinguish the native focus-color change from the backdrop transition; never delay or restart window motion. Background fade duration applies on the next opening, independently of window duration/startup speed; 0 shows the target opacity immediately after focus settling. Completing window motion must not force backdrop completion. Cancel the queued start and fade on hide/close. For blur only, retain a clean pre-opening capture, refresh after focus settling, replace notes plus a 32px shadow margin with clean pixels before blurring, and discard the original capture. Dark styles continue making no capture calls.
+- revision 13: present topic, entry, and confirmation dialogs through a shared foreground modal path. Finish any in-progress window entrance before centering the dialog; use application modality and topmost/X11 override-redirect flags so GNOME cannot put it behind the notes host. Set modality before flags (QMessageBox may reset its flags on modality changes), and use Qt-rendered message boxes. Raise/activate the dialog, center after mapping, restore notes activation after dismissal, and release dialog objects. Alt+T must focus the New topic text field and support accept/cancel under all animation strategies.
+
+## Revision 14 — search-first retrieval
+
+- Present a prominent search field, compact single-line result summaries, and a selectable,
+  read-only full-value preview. Preserve substring matching across topic/key/value and existing
+  topic/entry result order. Preserve complete stored values, including trailing newlines, when
+  displaying previews, editing, and copying. Restore the previous query fully selected.
+- Notes → Layout → Always show topics is persisted as `notes_always_show_topics` (boolean,
+  default false). Otherwise the Topics button expands/collapses the sidebar for this session.
+  Switching the layout preserves search, selection, and an active editor. Topic selection still
+  clears global search. Management actions live under Manage with existing mnemonics/shortcuts.
+- Start at 1000 logical pixels wide and min(700, 70% work-area height), bounded to the work area
+  with 16px margins. Keep user-resized dimensions during the session. Below 800 logical pixels
+  wide, stack results over the preview. Retain font-size controls and resizing.
+- Select the first result initially and preserve the selected topic/index on matching refreshes.
+  Up/Down in search moves selection without transferring focus; Enter focuses the preview.
+  No results clears preview and disables copy/edit/delete. Ctrl+Shift+C / Copy value copies the
+  complete selected value and shows brief feedback without dismissing notes.
+- Editing requires F2 / Edit key or Shift+F2 / Edit value. Disable automatic typing/double-click
+  edit triggers. Key edits commit with Enter; multiline values commit with Ctrl+Enter; Tab retains
+  cell-editor navigation. Escape cancels a cell edit before dismissing on the next press. Empty
+  keys keep the editor open with feedback. Focus loss and backdrop clicks do not dismiss active
+  edits. Explicit close/toggle commits valid edits and rejects closing on an invalid key.
+  Search and topic selection are disabled during an edit to prevent rebuilding its model.
+  User-note edits/deletes work from global search; shortcut topics remain read-only.
+- Default absent appearance preferences to palette / 180ms / startup speed 3 / dim background /
+  40% opacity. Preserve explicit saved values, independent background timing, fade/slide options,
+  and Off. Detect reduced motion through GNOME enable-animations or Windows client-area-animation
+  settings when available, suppressing entrance reveal/translation. Manual Off remains available.
+  No animation is added to result updates or dismissal.
+- Review artifacts and reproduction instructions: `docs/notes-search-review/revision-14/README.md`.
+
+## Revision 15 — restore direct cell editing
+
+- Restore double-click and standard Qt edit-key triggers for editable table cells. Enter while
+  the table is focused edits the current cell; Enter in search continues to focus the preview.
+  The Edit entry button also edits the current cell, choosing the key if the topic column is
+  selected. Remove the dedicated F2/Shift+F2 shortcuts and separate key/value edit buttons.
+- Retain inline validation, Escape cancellation, Ctrl+Enter multiline commit, focus-loss
+  protection, the full-value preview, and read-only shortcut/topic context cells.
+- Live app testing and new screenshots are deferred at the user's request.
+
+## Revision 16 — full values in the table
+
+- Remove compact value summaries and the separate full-note preview pane. Show complete
+  multiline key/value content directly in the table with word wrapping and content-sized rows.
+  Recalculate row heights after column resizing and font-size changes. Keep complete stored
+  values, including trailing newlines, for editing and copying.
+- Keep both topic-sidebar layouts, search matching/order, full-value copying, and direct inline
+  editing. Enter in search focuses the table; Enter or double-click in the table edits a cell.
+  Show empty-result feedback below the table.
+- Resume live-app screenshot/recording review with disposable sample data.
+
+## Revision 17 — persistent topic column
+
+- Always show Topic / Key / Value columns, including when the search is empty or has no matches.
+  An empty search still shows only the selected topic's entries; nonempty search still spans all
+  topics. Topic cells are always read-only. Keep key/value editing, multiline values and full-value
+  copying aligned to their fixed columns.
+
+## Revision 18 — simpler footer and save on cell exit
+
+- Remove bottom keyboard hints, Edit entry / Manage / Copy value buttons and copy feedback.
+  Show a New topic button. Keep other note operations in the Notes menu and existing shortcuts.
+- Leaving a key/value editor commits valid edits immediately, including clicking another cell,
+  search, a topic, or switching applications. Keep search and topic controls enabled while editing.
+  Retain Escape cancellation and reject empty keys with feedback attached to the editor.
+  Opening an editor's context menu does not end the edit.
+- Live tests and screenshots are deferred at the user's request; use offscreen regression tests.
+
+## Revision 19 — New note with topic prefill
+
+- Add a visible New note button alongside New topic; the menu and Ctrl+N / Alt+N open the same
+  dialog. Include an editable topic selector populated with writable topics.
+- With a nonempty search and results, prefill the first result's topic regardless of selected
+  result or sidebar topic. Otherwise use the selected topic, or leave blank if none exists.
+- Let the user choose another topic or type a new one, created only when saving a valid note.
+  Reject blank topics/keys and read-only `shortcuts/` topics with inline feedback; a shortcut
+  result's topic is still prefilled so its origin remains explicit. Cancel changes nothing.
+- After saving, clear search and show/select the new note in its destination topic. Resume
+  native-app interaction checks and screenshot review with disposable sample data.
+
+## Revision 20 — restore real keyboard focus after dialogs
+
+- Restore focus after the modal event loop and dialog teardown, not synchronously during
+  dismissal. Raise/activate the actual Notes surface and focus the table (or search if empty).
+  On Qt's xcb backend, explicitly restore X11/XWayland input focus because window-manager
+  activation requests can leave an unmanaged palette host logically active without keyboard focus.
+- Guard focus-loss dismissal during modal dialogs and queued restoration. Cancel queued focus
+  restoration when notes hides; do not reopen hidden windows or use persistent focus retries.
+- Regression checks cover Save/Cancel for fade and palette, native X11 focus after the normal
+  dismissal timeout, and real keyboard input to Notes after saving.
+
+- Revision 20 also assigns Alt+N to the New note button's mnemonic and renames the Notes menu
+  to Settings (Alt+S). Remove the redundant explicit Alt+N shortcut to prevent ambiguity.

@@ -1,10 +1,9 @@
 import subprocess
 
-from src.platform.linux_gnome.gnome_window_detection import get_open_windows
-
 
 def get_window_id_by_app_name(app_name):
-    """Return the window-calls ID for the first window matching app_name (wm_class)."""
+    """Return the window ID for the first window matching app_name (wm_class)."""
+    from src.platform import get_open_windows  # late import: avoids dispatch cycle
     windows = get_open_windows()
     for window in windows:
         if window.get("wm_class") == app_name:

@@ -3,8 +3,10 @@
 Runs offscreen with data storage redirected to a tmp dir.
 """
 
+import json
+
 import pytest
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QTimeLine, Qt
 
 from src import data_storage
 from src.notes.notes_window import NotesWindow
@@ -82,9 +84,10 @@ def test_clicking_topic_exits_search(qtbot, temp_data_dir, topic_row):
     assert window.search_edit.text() == ""
     assert data_storage.get_notes_last_search() == ""
     assert window._current_topic() == item.text()
-    assert window.table.columnCount() == 2
+    assert window.table.columnCount() == 3
     assert window.table.rowCount() == 1
-    assert window.table.item(0, 0).text() == item.text() + " key"
+    assert window.table.item(0, 0).text() == item.text()
+    assert window.table.item(0, 1).text() == item.text() + " key"
 
 
 def test_keyboard_topic_selection_exits_search(qtbot, temp_data_dir):
@@ -96,3 +99,584 @@ def test_keyboard_topic_selection_exits_search(qtbot, temp_data_dir):
     assert window._current_topic() == "beta"
     assert window.search_edit.text() == ""
     assert data_storage.get_notes_last_search() == ""
+
+
+@pytest.mark.parametrize("value, expected", [
+    (0, 0), (240, 240), (1000, 1000),
+    (-1, 180), (1001, 180), ("fast", 180), (None, 180),
+    (True, 180), (1.5, 180),
+])
+def test_fade_duration_config(temp_data_dir, value, expected):
+    (temp_data_dir / "config.json").write_text(json.dumps({
+        "notes_fade_in_duration_ms": value,
+    }))
+    assert data_storage.get_notes_fade_in_duration_ms() == expected
+
+
+def test_fade_in_progresses_and_finishes(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy("fade")
+    window = _make_window(qtbot)
+    window.show()
+    assert window._fade_in.duration() == 120
+    assert window.windowOpacity() == 1.0
+    assert window._fade_overlay.isVisible()
+    assert window._fade_overlay.progress == 0.0
+    qtbot.waitUntil(lambda: 0.0 < window._fade_overlay.progress < 1.0)
+    # The window remains interactive while fading.
+    qtbot.keyClicks(window.search_edit, "query")
+    assert window.search_edit.text() == "query"
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert window._fade_overlay.progress == 1.0
+    assert not window._fade_overlay.isVisible()
+
+
+@pytest.mark.parametrize("hide_method", ["hide", "close"])
+def test_interrupted_fade_stops_and_reopens(qtbot, temp_data_dir, hide_method):
+    data_storage.save_notes_animation_strategy("fade")
+    window = _make_window(qtbot)
+    window.show()
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
+    getattr(window, hide_method)()
+    assert window._fade_in.state() == QTimeLine.State.NotRunning
+    assert window._fade_overlay.progress == 1.0
+    assert not window._fade_overlay.isVisible()
+    window.show()
+    assert window._fade_overlay.progress == 0.0
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert window._fade_overlay.progress == 1.0
+    assert not window._fade_overlay.isVisible()
+
+
+@pytest.mark.parametrize("strategy", ["fade", "slide"])
+def test_animation_starts_immediately_without_waiting_for_exposure(
+        qtbot, temp_data_dir, monkeypatch, strategy):
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    data_storage.save_notes_animation_strategy(strategy)
+    window = _make_window(qtbot)
+    window.winId()
+    monkeypatch.setattr(window.windowHandle(), "isExposed", lambda: False)
+    window.show()
+    assert window._fade_in.state() == QTimeLine.State.Running
+    qtbot.waitUntil(lambda: window._fade_in.currentTime() > 0)
+    if strategy == "slide":
+        window.close()
+        return
+    for elapsed, expected in ((0, 0), (250, 0.578125), (500, 0.875),
+                              (750, 0.984375), (1000, 1)):
+        window._fade_in.setCurrentTime(elapsed)
+        assert window._fade_overlay.progress == pytest.approx(expected, abs=0.005)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+
+
+def test_hiding_immediately_stops_animation(qtbot, temp_data_dir):
+    window = _make_window(qtbot)
+    window.show()
+    window.hide()
+    qtbot.wait(50)
+    assert window._fade_in.state() == QTimeLine.State.NotRunning
+    assert window._fade_overlay.progress == 1.0
+    assert not window._fade_overlay.isVisible()
+
+
+def test_fade_reveals_rendered_content_without_native_opacity(
+        qtbot, temp_data_dir, monkeypatch):
+    data_storage.save_notes_animation_strategy("fade")
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    data_storage.add_topic("Example topic")
+    window = _make_window(qtbot)
+
+    def reject_native_opacity(_value):
+        pytest.fail("The fade must not use compositor window opacity")
+
+    monkeypatch.setattr(window, "setWindowOpacity", reject_native_opacity)
+    window.show()
+    # Render deterministic frames without advancing the animation's clock.
+    covered = window.grab().toImage()
+    window._fade_overlay.setProgress(0.5)
+    halfway = window.grab().toImage()
+    window._fade_overlay.hide()
+    revealed = window.grab().toImage()
+    changed_pixels = 0
+    for y in range(5, covered.height(), 15):
+        for x in range(5, covered.width(), 15):
+            start = covered.pixelColor(x, y).getRgb()[:3]
+            middle = halfway.pixelColor(x, y).getRgb()[:3]
+            end = revealed.pixelColor(x, y).getRgb()[:3]
+            assert start == (43, 43, 43)
+            if start != end:
+                changed_pixels += 1
+                assert middle == pytest.approx(
+                    tuple((a + b) / 2 for a, b in zip(start, end)), abs=2)
+    assert changed_pixels > 0
+    assert window.windowOpacity() == 1.0
+    window.hide()
+
+
+def test_fade_cover_follows_resize_and_passes_mouse_input(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy("fade")
+    data_storage.add_topic("alpha")
+    data_storage.add_topic("beta")
+    window = _make_window(qtbot)
+    window.show()
+    window.resize(600, 400)
+    assert window._fade_overlay.geometry() == window.rect()
+    window.topics_btn.setChecked(True)
+    qtbot.wait(10)
+    item = window.topic_list.item(1)
+    position = window.topic_list.viewport().mapTo(
+        window, window.topic_list.visualItemRect(item).center())
+    assert window.childAt(position) is window.topic_list.viewport()
+    qtbot.mouseClick(window.topic_list.viewport(), Qt.MouseButton.LeftButton,
+                     pos=window.topic_list.visualItemRect(item).center())
+    assert window._current_topic() == "beta"
+
+
+def test_fade_config_is_reloaded_and_can_disable_animation(qtbot, temp_data_dir):
+    config = temp_data_dir / "config.json"
+    config.write_text('{"notes_fade_in_duration_ms": 250}')
+    window = _make_window(qtbot)
+    window.show()
+    assert window._fade_in.duration() == 250
+    window.hide()
+    config.write_text('{"notes_fade_in_duration_ms": 0}')
+    window.show()
+    assert window._fade_overlay.progress == 1.0
+    assert not window._fade_overlay.isVisible()
+    assert window._fade_in.state() == QTimeLine.State.NotRunning
+    assert window.fade_duration_slider.value() == 0
+    assert "Off" in window.fade_duration_label.text()
+
+
+def test_fade_slider_saves_and_restores_without_overwriting_settings(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy("fade")
+    data_storage.save_notes_last_search("keep this")
+    window = _make_window(qtbot)
+    assert window.fade_duration_slider.value() == 120
+    window.fade_duration_slider.setValue(350)
+    assert data_storage.get_notes_fade_in_duration_ms() == 350
+    assert data_storage.get_notes_last_search() == "keep this"
+    restored = _make_window(qtbot)
+    assert restored.fade_duration_slider.value() == 350
+    assert "350 ms" in restored.fade_duration_label.text()
+    restored.show()
+    assert restored._fade_in.duration() == 350
+
+
+def test_fade_slider_in_notes_menu_supports_keyboard(qtbot, temp_data_dir):
+    data_storage.save_notes_fade_in_duration_ms(0)
+    window = _make_window(qtbot)
+    window.show()
+    menu = window.menuBar().actions()[0].menu()
+    menu.popup(window.menuBar().mapToGlobal(window.menuBar().rect().bottomLeft()))
+    qtbot.waitUntil(lambda: window.fade_duration_slider.hasFocus())
+    for key in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down):
+        qtbot.keyClick(window.fade_duration_slider, key)
+        assert window.fade_duration_slider.value() == 0
+        assert data_storage.get_notes_fade_in_duration_ms() == 0
+    qtbot.keyClick(window.fade_duration_slider, Qt.Key.Key_End)
+    assert data_storage.get_notes_fade_in_duration_ms() == 1000
+    qtbot.keyClick(window.fade_duration_slider, Qt.Key.Key_Home)
+    assert data_storage.get_notes_fade_in_duration_ms() == 0
+    assert "Off" in window.fade_duration_label.text()
+    menu.close()
+
+
+def test_slide_strategy_moves_down_and_persists(qtbot, temp_data_dir):
+    window = _make_window(qtbot)
+    window.animation_actions['slide'].trigger()
+    assert data_storage.get_notes_animation_strategy() == 'slide'
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window.show()
+    target = window._slide_target
+    assert window._slide_surface.y() < target.y()
+    assert not window._fade_overlay.isVisible()
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.Running)
+    window._fade_in.setCurrentTime(500)
+    assert window._slide_surface.y() == round(window._slide_start_y + (target.y() - window._slide_start_y) * 0.875)
+    window._fade_in.setCurrentTime(1000)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert window._slide_surface.pos() == target
+    window.close()
+    restored = _make_window(qtbot)
+    assert restored.animation_actions['slide'].isChecked()
+    restored.animation_actions['fade'].trigger()
+    assert data_storage.get_notes_animation_strategy() == 'fade'
+
+
+def test_opening_has_no_slow_start():
+    from src.notes.notes_window import _fade_easing
+    # First 1% of time already makes visible progress, with no initial hold.
+    assert _fade_easing(0) == 0
+    assert _fade_easing(0.01) > 0.025
+    assert _fade_easing(0.05) > 0.14
+    assert _fade_easing(1) == 1
+
+
+@pytest.mark.parametrize("speed", [1, 3, 6])
+def test_startup_speed_saves_and_applies(qtbot, temp_data_dir, speed):
+    window = _make_window(qtbot)
+    window.startup_speed_combo.setCurrentIndex(speed - 1)
+    assert data_storage.get_notes_animation_startup_speed() == speed
+    restored = _make_window(qtbot)
+    assert restored.startup_speed_combo.currentData() == speed
+    restored.show()
+    assert restored._fade_in.easingCurve().valueForProgress(0.5) == pytest.approx(1 - 0.5 ** speed)
+
+
+def test_slide_starts_entirely_above_physical_screen(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy('slide')
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window = _make_window(qtbot)
+    window.show()
+    assert window._slide_surface.frameGeometry().bottom() < window.screen().geometry().top()
+    assert window._slide_target.y() >= window.screen().availableGeometry().top()
+    window.close()
+
+
+@pytest.mark.parametrize("cancel", ["hide", "close"])
+def test_slide_surface_bypasses_window_manager_and_cleans_up(qtbot, temp_data_dir, cancel):
+    data_storage.save_notes_animation_strategy("slide")
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window = _make_window(qtbot)
+    window.show()
+    surface = window._slide_surface
+    assert surface.windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
+    assert window.parentWidget() is surface
+    qtbot.keyClicks(window.search_edit, "live input")
+    assert window.search_edit.text() == "live input"
+    getattr(window, cancel)()
+    assert window._slide_surface is None
+    assert window.parentWidget() is None
+    assert not window.isVisible()
+    assert not surface.isVisible()
+    window.show()
+    window._fade_in.setCurrentTime(1000)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert window.isVisible()
+    assert window.parentWidget() is window._slide_surface
+    assert window._slide_surface.windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
+    assert window.search_edit.text() == "live input"
+
+
+def test_title_bar_stays_visible_across_slide_handoff(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy('slide')
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window = _make_window(qtbot)
+    window.show()
+    title_bar = window.title_bar
+    initial_surface = window._slide_surface
+    initial_native_id = int(initial_surface.winId())
+    assert title_bar.isVisible()
+    assert window._normal_window_flags & Qt.WindowType.FramelessWindowHint
+    window._fade_in.setCurrentTime(1000)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert window.title_bar is title_bar
+    assert window._slide_surface is initial_surface
+    assert int(window._slide_surface.winId()) == initial_native_id
+    assert title_bar.isVisible()
+    assert window._slide_surface.windowFlags() & Qt.WindowType.FramelessWindowHint
+    surface = window._slide_surface
+    original_geometry = surface.geometry()
+    native_id = int(surface.winId())
+    title_bar._toggle_maximized()
+    assert surface.geometry() == surface.screen().availableGeometry()
+    title_bar._toggle_maximized()
+    assert surface.geometry() == original_geometry
+    assert int(surface.winId()) == native_id
+
+
+@pytest.mark.parametrize('strategy', ['fade', 'slide'])
+def test_backdrop_fades_independently_of_motion_and_live_opacity(qtbot, temp_data_dir, strategy):
+    data_storage.save_notes_animation_strategy(strategy)
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window = _make_window(qtbot)
+    window.show()
+    backdrop = window._backdrop
+    assert backdrop is not None
+    assert backdrop.isVisible()
+    assert backdrop.strength == 0
+    window._fade_in.setCurrentTime(500)
+    assert backdrop.strength == 0  # Focus colors change before the scrim fades.
+    qtbot.waitUntil(lambda: window._backdrop_fade.state() == QTimeLine.State.Running)
+    window._backdrop_fade.setCurrentTime(160)
+    assert backdrop.strength == pytest.approx(0.5 * 0.4)
+    window.backdrop_slider.setValue(80)
+    assert data_storage.get_notes_backdrop_opacity() == 80
+    assert backdrop.strength == pytest.approx(0.5 * 0.8)
+    window._fade_in.setCurrentTime(1000)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert backdrop.strength < 0.8  # Completing motion must not snap the background.
+    window._backdrop_fade.setCurrentTime(320)
+    assert backdrop.strength == pytest.approx(0.8)
+    window.close()
+    assert window._backdrop is None
+    assert not backdrop.isVisible()
+
+
+def test_backdrop_disabled_and_dismissed_by_click(qtbot, temp_data_dir):
+    data_storage.save_notes_backdrop_opacity(0)
+    window = _make_window(qtbot)
+    window.show()
+    assert window._backdrop is None
+    window.close()
+    data_storage.save_notes_backdrop_opacity(60)
+    window.show()
+    backdrop = window._backdrop
+    qtbot.mouseClick(backdrop, Qt.MouseButton.LeftButton)
+    assert not window.isVisible()
+    assert window._backdrop is None
+
+
+@pytest.mark.parametrize('strategy', ['fade', 'slide'])
+def test_backdrop_never_covers_notes_and_tracks_window(qtbot, temp_data_dir, strategy):
+    from PyQt6.QtCore import QPoint
+    from PyQt6.QtGui import QRegion
+    data_storage.save_notes_animation_strategy(strategy)
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    window = _make_window(qtbot)
+    window.show()
+    window._fade_in.setCurrentTime(1000)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    backdrop = window._backdrop
+    surface = window._slide_surface or window
+
+    def check_exclusion():
+        rect = surface.rect().translated(surface.mapToGlobal(QPoint()) - backdrop.pos())
+        assert backdrop.mask().intersected(QRegion(rect)).isEmpty()
+        assert not backdrop.mask().isEmpty()
+        assert backdrop.mask().contains(QPoint(0, 0))
+
+    check_exclusion()
+    surface.move(surface.x() + 20, surface.y() + 20)
+    surface.resize(surface.width() - 40, surface.height() - 40)
+    check_exclusion()
+
+
+def test_slide_has_longer_default_but_preserves_explicit_duration(temp_data_dir):
+    data_storage.save_notes_animation_strategy('slide')
+    assert data_storage.get_notes_fade_in_duration_ms() == 360
+    data_storage.save_notes_fade_in_duration_ms(120)
+    assert data_storage.get_notes_fade_in_duration_ms() == 120
+    data_storage.save_notes_fade_in_duration_ms(0)
+    assert data_storage.get_notes_fade_in_duration_ms() == 0
+
+
+def test_command_palette_combines_short_descent_and_reveal(qtbot, temp_data_dir):
+    window = _make_window(qtbot)
+    window.animation_actions['palette'].trigger()
+    assert data_storage.get_notes_animation_strategy() == 'palette'
+    assert data_storage.get_notes_fade_in_duration_ms() == 180
+    window.show()
+    surface = window._slide_surface
+    native_id = int(surface.winId())
+    target = window._slide_target
+    assert surface.y() == target.y() - 12
+    assert window._fade_overlay.isVisible()
+    assert window._fade_overlay.progress == 0.85
+    assert window.windowOpacity() == 1
+    window._fade_in.setCurrentTime(90)
+    assert surface.y() == round(target.y() - 12 + 12 * 0.875)
+    assert window._fade_overlay.progress == pytest.approx(1.0)
+    qtbot.keyClicks(window.search_edit, 'command')
+    window._fade_in.setCurrentTime(180)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert surface.pos() == target
+    assert int(surface.winId()) == native_id
+    assert not window._fade_overlay.isVisible()
+    assert window.search_edit.text() == 'command'
+    window.close()
+    restored = _make_window(qtbot)
+    assert restored.animation_actions['palette'].isChecked()
+
+
+def test_command_palette_can_disable_animation(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy('palette')
+    data_storage.save_notes_fade_in_duration_ms(0)
+    window = _make_window(qtbot)
+    window.show()
+    assert window._slide_surface is None
+    assert window._fade_in.state() == QTimeLine.State.NotRunning
+    assert not window._fade_overlay.isVisible()
+
+
+def test_palette_is_readable_early_and_finishes_reveal_before_motion(qtbot, temp_data_dir):
+    data_storage.save_notes_animation_strategy('palette')
+    data_storage.save_notes_fade_in_duration_ms(1000)
+    data_storage.save_notes_animation_startup_speed(1)
+    window = _make_window(qtbot)
+    window.show()
+    surface = window._slide_surface
+    native_id = int(surface.winId())
+    assert window._fade_overlay.progress == 0.85
+    window._fade_in.setCurrentTime(200)
+    assert window._fade_overlay.progress == pytest.approx(0.9625)
+    window._fade_in.setCurrentTime(400)
+    assert window._fade_overlay.progress == 1
+    assert not window._fade_overlay.isVisible()
+    assert surface.y() < window._slide_target.y()
+    assert window._backdrop.strength < window.backdrop_slider.value() / 100
+    window._fade_in.setCurrentTime(1000)
+    qtbot.waitUntil(lambda: window._fade_in.state() == QTimeLine.State.NotRunning)
+    assert surface.pos() == window._slide_target
+    assert int(surface.winId()) == native_id
+
+
+@pytest.mark.parametrize('style', ['dim', 'spotlight', 'blur'])
+def test_background_style_persists_and_applies_next_opening(qtbot, temp_data_dir, style):
+    window = _make_window(qtbot)
+    window.show()
+    original = window._backdrop
+    index = window.backdrop_style_combo.findData(style)
+    window.backdrop_style_combo.setCurrentIndex(index)
+    assert data_storage.get_notes_backdrop_style() == style
+    assert window._backdrop is original
+    window.close()
+    window.show()
+    assert window._backdrop.style == style
+    assert window.backdrop_style_combo.currentData() == style
+
+
+@pytest.mark.parametrize('value, expected', [(None, 'dim'), ('invalid', 'dim'),
+                                           ('dim', 'dim'), ('spotlight', 'spotlight'),
+                                           ('blur', 'blur')])
+def test_background_style_validation(temp_data_dir, value, expected):
+    data_storage.save_notes_backdrop_style(value)
+    assert data_storage.get_notes_backdrop_style() == expected
+
+
+@pytest.mark.parametrize('running', [False, True])
+def test_background_focus_delay_and_fade_cancel_on_close(qtbot, temp_data_dir, running):
+    window = _make_window(qtbot)
+    window.show()
+    assert window._backdrop_start.isActive()
+    assert window._backdrop.strength == 0
+    if running:
+        qtbot.waitUntil(lambda: window._backdrop_fade.state() == QTimeLine.State.Running)
+    window.close()
+    qtbot.wait(100)
+    assert not window._backdrop_start.isActive()
+    assert window._backdrop_fade.state() == QTimeLine.State.NotRunning
+    assert window._backdrop is None
+
+
+def test_background_fade_setting_is_saved_and_independent(qtbot, temp_data_dir):
+    data_storage.save_notes_fade_in_duration_ms(0)
+    window = _make_window(qtbot)
+    window.backdrop_fade_slider.setValue(640)
+    assert data_storage.get_notes_backdrop_fade_duration_ms() == 640
+    window.show()
+    assert window._fade_in.state() == QTimeLine.State.NotRunning
+    qtbot.waitUntil(lambda: window._backdrop_fade.state() == QTimeLine.State.Running)
+    assert window._backdrop_fade.duration() == 640
+    window._backdrop_fade.setCurrentTime(320)
+    assert window._backdrop.strength == pytest.approx(0.2)
+
+
+@pytest.mark.parametrize('value, expected', [(None, 320), (True, 320), (-1, 320),
+                                           (1001, 320), (0, 0), (640, 640)])
+def test_background_fade_duration_validation(temp_data_dir, value, expected):
+    data_storage.save_notes_backdrop_fade_duration_ms(value)
+    assert data_storage.get_notes_backdrop_fade_duration_ms() == expected
+
+
+def test_background_fade_can_be_disabled(qtbot, temp_data_dir):
+    data_storage.save_notes_backdrop_fade_duration_ms(0)
+    window = _make_window(qtbot)
+    window.show()
+    qtbot.waitUntil(lambda: window._backdrop.strength == pytest.approx(0.4))
+    assert window._backdrop_fade.state() == QTimeLine.State.NotRunning
+
+
+@pytest.mark.parametrize('strategy', ['fade', 'slide', 'palette'])
+def test_alt_t_dialog_is_modal_above_notes_and_accepts_input(qtbot, temp_data_dir, strategy):
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QApplication, QInputDialog, QLineEdit
+    data_storage.save_notes_animation_strategy(strategy)
+    window = _make_window(qtbot)
+    window.show()
+    window.window().activateWindow()
+    qtbot.wait(20)
+    inspected = []
+
+    def fill_dialog():
+        dialog = QApplication.activeModalWidget()
+        try:
+            assert isinstance(dialog, QInputDialog)
+            inspected.append(dialog)
+            assert dialog.windowFlags() & Qt.WindowType.WindowStaysOnTopHint
+            assert dialog.windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
+            assert dialog.findChild(QLineEdit).hasFocus()
+            expected = window.mapToGlobal(window.rect().center())
+            assert (dialog.frameGeometry().center() - expected).manhattanLength() <= 2
+            dialog.setTextValue('new topic from mnemonic')
+            dialog.accept()
+        finally:
+            if dialog is not None and dialog.isVisible():
+                dialog.reject()
+
+    QTimer.singleShot(250, fill_dialog)
+    qtbot.keyClick(window, Qt.Key.Key_T, Qt.KeyboardModifier.AltModifier)
+    qtbot.waitUntil(lambda: bool(inspected))
+    assert 'new topic from mnemonic' in data_storage.get_topics()
+    assert window.isVisible()
+
+
+def test_cancel_new_topic_leaves_data_unchanged(qtbot, temp_data_dir):
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QApplication
+    data_storage.add_topic('existing')
+    window = _make_window(qtbot)
+    window.show()
+    QTimer.singleShot(50, lambda: QApplication.activeModalWidget().reject())
+    window._new_topic()
+    assert list(data_storage.get_topics()) == ['existing']
+    assert window.isVisible()
+
+
+def test_entry_dialog_uses_foreground_modal_path(qtbot, temp_data_dir):
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QApplication
+    from src.notes.notes_window import EntryDialog
+    data_storage.add_topic('sample')
+    data_storage.save_notes_animation_strategy('palette')
+    window = _make_window(qtbot)
+    window.show()
+
+    def save_entry():
+        dialog = QApplication.activeModalWidget()
+        try:
+            assert isinstance(dialog, EntryDialog)
+            assert dialog.windowFlags() & Qt.WindowType.X11BypassWindowManagerHint
+            dialog.key_edit.setText('key')
+            dialog.value_edit.setPlainText('value')
+            dialog.accept()
+        finally:
+            if dialog is not None and dialog.isVisible():
+                dialog.reject()
+
+    QTimer.singleShot(50, save_entry)
+    window._new_entry()
+    assert data_storage.get_topics()['sample'] == [{'key': 'key', 'value': 'value'}]
+
+
+def test_delete_confirmation_can_cancel_in_foreground(qtbot, temp_data_dir):
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QApplication, QMessageBox
+    data_storage.add_topic('keep')
+    window = _make_window(qtbot)
+    window.show()
+
+    def cancel_delete():
+        dialog = QApplication.activeModalWidget()
+        try:
+            assert isinstance(dialog, QMessageBox)
+            assert dialog.windowFlags() & Qt.WindowType.WindowStaysOnTopHint
+            dialog.done(int(QMessageBox.StandardButton.No))
+        finally:
+            if dialog is not None and dialog.isVisible():
+                dialog.reject()
+
+    QTimer.singleShot(50, cancel_delete)
+    window._delete_topic()
+    assert 'keep' in data_storage.get_topics()
