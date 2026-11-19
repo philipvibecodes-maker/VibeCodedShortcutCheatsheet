@@ -268,7 +268,7 @@ class _FadeOverlay(QWidget):
 class EntryDialog(QDialog):
     """Dialog for recording a key -> multi-line text entry."""
 
-    def __init__(self, parent=None, key="", value="", title="Entry"):
+    def __init__(self, parent=None, key="", value="", title="Entry", topic=None, topics=()):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setStyleSheet(parent.styleSheet() if parent else DARK_THEME)
@@ -276,12 +276,31 @@ class EntryDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        layout.addWidget(QLabel("&Key:"))
+        if topic is not None:
+            topic_label = QLabel("&Topic:")
+            self.topic_combo = QComboBox()
+            self.topic_combo.setEditable(True)
+            self.topic_combo.addItems(list(topics))
+            self.topic_combo.setCurrentText(topic)
+            self.topic_combo.setAccessibleName("Topic")
+            topic_label.setBuddy(self.topic_combo)
+            layout.addWidget(topic_label)
+            layout.addWidget(self.topic_combo)
+        self.error_label = QLabel()
+        self.error_label.setWordWrap(True)
+        self.error_label.hide()
+        layout.addWidget(self.error_label)
+
+        key_label = QLabel("&Key:")
+        layout.addWidget(key_label)
         self.key_edit = QLineEdit(key)
+        key_label.setBuddy(self.key_edit)
         layout.addWidget(self.key_edit)
 
-        layout.addWidget(QLabel("&Value:"))
+        value_label = QLabel("&Value:")
+        layout.addWidget(value_label)
         self.value_edit = QPlainTextEdit(value)
+        value_label.setBuddy(self.value_edit)
         self.value_edit.setMinimumSize(400, 160)
         layout.addWidget(self.value_edit)
 
@@ -305,7 +324,17 @@ class EntryDialog(QDialog):
         QShortcut(QKeySequence("Ctrl+Return"), self, activated=self._on_save)
 
     def _on_save(self):
+        if hasattr(self, "topic_combo"):
+            topic = self.topic_combo.currentText().strip()
+            if not topic or topic.startswith(SHORTCUT_TOPIC_PREFIX):
+                self.error_label.setText("Choose a writable topic." if topic else "Enter a topic.")
+                self.error_label.show()
+                self.topic_combo.setFocus()
+                return
         if not self.key_edit.text().strip():
+            self.error_label.setText("Enter a note key.")
+            self.error_label.show()
+            self.key_edit.setFocus()
             return
         self.accept()
 
@@ -598,13 +627,16 @@ class NotesWindow(QMainWindow):
         self.new_topic_btn = QPushButton("New &topic")
         self.new_topic_btn.clicked.connect(self._new_topic)
         buttons.addWidget(self.new_topic_btn)
+        self.new_note_btn = QPushButton("New note")
+        self.new_note_btn.clicked.connect(self._new_entry)
+        buttons.addWidget(self.new_note_btn)
         buttons.addStretch()
         buttons.addWidget(QSizeGrip(self))
         layout.addLayout(buttons)
 
         # Keep other note operations available without a bottom toolbar.
         notes_menu.addSeparator()
-        self.new_entry_action = notes_menu.addAction("New entry", self._new_entry)
+        self.new_entry_action = notes_menu.addAction("New note", self._new_entry)
         self.edit_entry_action = notes_menu.addAction("Edit entry", self._edit_entry)
         self.delete_entry_action = notes_menu.addAction("Delete entry", self._delete_entry)
         self.delete_topic_action = notes_menu.addAction("Delete topic", self._delete_topic)
@@ -817,8 +849,6 @@ class NotesWindow(QMainWindow):
         if self.table.rowCount():
             self.table.setCurrentCell(selected_row, 0)
         self._update_selection_actions()
-        readonly = self._is_readonly_topic(self._current_topic()) or searching
-        self.new_entry_action.setEnabled(not readonly)
         topic, index = self._selected_entry()
         self.edit_entry_action.setEnabled(topic is not None)
         self.delete_entry_action.setEnabled(topic is not None)
@@ -880,18 +910,26 @@ class NotesWindow(QMainWindow):
             delete_topic(topic)
             self._refresh_topics()
 
+    def _new_note_topic(self):
+        if self.search_edit.text().strip() and self.table.rowCount():
+            return self.table.item(0, 0).text()
+        return self._current_topic() or ""
+
     def _new_entry(self):
         if not self._commit_editor():
             return
-        topic = self._current_topic()
-        if not topic or self._is_readonly_topic(topic):
-            return
-        dialog = EntryDialog(self, title=f"New entry — {topic}")
+        dialog = EntryDialog(self, title="New note", topic=self._new_note_topic(),
+                             topics=get_topics())
         if self._exec_dialog(dialog) == QDialog.DialogCode.Accepted:
+            topic = dialog.topic_combo.currentText().strip()
             key, value = dialog.result()
-            if add_topic_entry(topic, key, value):
-                self._refresh_topics(select=topic)
-                self.table.setCurrentCell(self.table.rowCount() - 1, 0)
+            if topic and key and not self._is_readonly_topic(topic):
+                if topic not in get_topics():
+                    add_topic(topic)
+                if add_topic_entry(topic, key, value):
+                    self.search_edit.clear()
+                    self._refresh_topics(select=topic)
+                    self.table.setCurrentCell(self.table.rowCount() - 1, 1)
         dialog.deleteLater()
 
     def _selected_entry(self):

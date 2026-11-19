@@ -314,3 +314,70 @@ def test_invalid_key_does_not_overwrite_saved_key_on_exit(notes, qtbot):
     assert storage.get_topics()['alpha'][0]['key'] == 'First'
     assert notes._active_editor is not None
     notes._escape()
+
+
+@pytest.mark.parametrize('query,selected_topic,expected', [
+    ('', 'beta', 'beta'), ('First', 'beta', 'alpha'),
+    ('no matches', 'beta', 'beta'), ('   ', 'beta', 'beta'),
+])
+def test_new_note_topic_prefill(notes, monkeypatch, query, selected_topic, expected):
+    notes.topic_list.setCurrentRow(1)
+    assert notes._current_topic() == selected_topic
+    notes.search_edit.setText(query)
+    if notes.table.rowCount() > 1:
+        notes.table.setCurrentCell(notes.table.rowCount() - 1, 1)
+    inspected = []
+    def inspect(dialog):
+        inspected.append(dialog.topic_combo.currentText())
+        return 0
+    monkeypatch.setattr(notes, '_exec_dialog', inspect)
+    assert notes.new_note_btn.isVisible()
+    notes.new_note_btn.click()
+    assert inspected == [expected]
+
+
+def test_new_note_save_selected_destination_and_cancel(notes, monkeypatch):
+    from PyQt6.QtWidgets import QDialog
+    notes.search_edit.setText('First')
+    before = storage.get_topics()
+    monkeypatch.setattr(notes, '_exec_dialog', lambda dialog: QDialog.DialogCode.Rejected)
+    notes.new_note_btn.click()
+    assert storage.get_topics() == before
+    assert notes.search_edit.text() == 'First'
+    def save(dialog):
+        assert dialog.topic_combo.currentText() == 'alpha'
+        dialog.topic_combo.setCurrentText('new topic')
+        dialog.key_edit.setText('New note key')
+        dialog.value_edit.setPlainText('Full value\nSecond line\n')
+        return QDialog.DialogCode.Accepted
+    monkeypatch.setattr(notes, '_exec_dialog', save)
+    notes.new_note_btn.click()
+    assert storage.get_topics()['new topic'] == [{'key': 'New note key', 'value': 'Full value\nSecond line\n'}]
+    assert notes.search_edit.text() == ''
+    assert notes._current_topic() == 'new topic'
+    assert notes.table.item(notes.table.currentRow(), 1).text() == 'New note key'
+
+
+def test_new_note_empty_library_and_readonly_validation(qtbot, tmp_path, monkeypatch):
+    from src.notes.notes_window import EntryDialog
+    from PyQt6.QtWidgets import QDialog
+    monkeypatch.setattr(storage, 'get_data_dir', lambda: tmp_path)
+    window = NotesWindow()
+    qtbot.addWidget(window)
+    assert window._new_note_topic() == ''
+    storage.save_app_shortcuts('demo', [{'description': 'Find', 'keys': 'Ctrl+F'}])
+    window._refresh_topics()
+    window.search_edit.setText('Find')
+    assert window._new_note_topic() == 'shortcuts/demo'
+    dialog = EntryDialog(window, topic=window._new_note_topic(), topics=storage.get_topics())
+    qtbot.addWidget(dialog)
+    accepted = []
+    dialog.accepted.connect(lambda: accepted.append(True))
+    dialog.key_edit.setText('Key')
+    dialog._on_save()
+    assert dialog.error_label.text() == 'Choose a writable topic.'
+    assert not accepted
+    assert storage.get_topics() == {}
+    dialog.topic_combo.setCurrentText('')
+    dialog._on_save()
+    assert dialog.error_label.text() == 'Enter a topic.'

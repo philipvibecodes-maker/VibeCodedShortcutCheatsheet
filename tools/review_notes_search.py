@@ -12,11 +12,11 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QLabel
 from src import data_storage as storage
-from src.notes.notes_window import NotesWindow
+from src.notes.notes_window import NotesWindow, EntryDialog
 
 app = QApplication([])
 app.setQuitOnLastWindowClosed(False)
@@ -136,10 +136,38 @@ with tempfile.TemporaryDirectory() as temporary:
     assert not window.edit_entry_action.isEnabled()
     window._copy_value()
     assert app.clipboard().text() == 'Ctrl+P'
+    # Exercise the real modal flow through the visible button.
+    window.search_edit.setText('review')
+    window.table.setCurrentCell(window.table.rowCount() - 1, 1)
+    def save_new_note():
+        dialog = app.activeModalWidget()
+        assert isinstance(dialog, EntryDialog)
+        assert dialog.topic_combo.currentText() == 'Git commands'
+        assert dialog.grab().save(str(output / 'new-note-search-prefill.png'))
+        dialog.topic_combo.setCurrentText('Daily notes')
+        dialog.key_edit.setText('New note from live test')
+        dialog.value_edit.setPlainText('Saved through the New note button.\nFull multiline value.\n')
+        QTest.keyClick(dialog.key_edit, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+    QTimer.singleShot(250, save_new_note)
+    window.new_note_btn.click()
+    assert window._current_topic() == 'Daily notes'
+    assert window.search_edit.text() == ''
+    assert storage.get_topics()['Daily notes'][-1]['key'] == 'New note from live test'
+    capture('new-note-saved')
+    before = storage.get_topics()
+    def cancel_selected_topic_note():
+        dialog = app.activeModalWidget()
+        assert isinstance(dialog, EntryDialog)
+        assert dialog.topic_combo.currentText() == 'Daily notes'
+        assert dialog.grab().save(str(output / 'new-note-selected-topic.png'))
+        dialog.reject()
+    QTimer.singleShot(250, cancel_selected_topic_note)
+    window.new_note_btn.click()
+    assert storage.get_topics() == before
     window.close()
     QTest.qWait(100)
     background.close()
     window.deleteLater()
     QTest.qWait(100)
     app.quit()
-print(json.dumps({'screenshots': 7, 'recordings': [0, 120, 180], 'sample_data_only': True}))
+print(json.dumps({'screenshots': 10, 'recordings': [0, 120, 180], 'sample_data_only': True}))

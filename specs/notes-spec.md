@@ -100,3 +100,15 @@ The application has a notes window, separate from the cheatsheet window, that wi
   Retain Escape cancellation and reject empty keys with feedback attached to the editor.
   Opening an editor's context menu does not end the edit.
 - Live tests and screenshots are deferred at the user's request; use offscreen regression tests.
+
+## Revision 19 — New note with topic prefill
+
+- Add a visible New note button alongside New topic; the menu and Ctrl+N / Alt+N open the same
+  dialog. Include an editable topic selector populated with writable topics.
+- With a nonempty search and results, prefill the first result's topic regardless of selected
+  result or sidebar topic. Otherwise use the selected topic, or leave blank if none exists.
+- Let the user choose another topic or type a new one, created only when saving a valid note.
+  Reject blank topics/keys and read-only `shortcuts/` topics with inline feedback; a shortcut
+  result's topic is still prefilled so its origin remains explicit. Cancel changes nothing.
+- After saving, clear search and show/select the new note in its destination topic. Resume
+  native-app interaction checks and screenshot review with disposable sample data.
