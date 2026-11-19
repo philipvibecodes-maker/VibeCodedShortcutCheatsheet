@@ -56,4 +56,12 @@ __all__ = [
     "get_focused_app_name",
     "get_work_area",
     "get_corner_position",
+    "restore_keyboard_focus",
 ]
+
+
+def restore_keyboard_focus(window_id: int) -> None:
+    """Restore an X11/XWayland window; other Qt backends activate natively."""
+    if sys.platform.startswith("linux"):
+        from src.platform.linux_gnome.x11_window_detection import restore_keyboard_focus as restore
+        restore(window_id)

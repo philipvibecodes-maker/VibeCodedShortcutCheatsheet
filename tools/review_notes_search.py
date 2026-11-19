@@ -44,6 +44,14 @@ with tempfile.TemporaryDirectory() as temporary:
     QTest.qWait(150)
     window = NotesWindow()
     screen = app.primaryScreen()
+    focus_checks = []
+
+    def check_native_focus(label):
+        QTest.qWait(100)
+        expected = int(window.window().winId())
+        actual = int(subprocess.check_output(['xdotool', 'getwindowfocus'], text=True).strip())
+        assert window.isVisible() and actual == expected, (label, actual, expected)
+        focus_checks.append({'stage': label, 'actual': actual, 'expected': expected})
 
     def capture(name):
         QTest.qWait(160)
@@ -153,17 +161,38 @@ with tempfile.TemporaryDirectory() as temporary:
     assert window._current_topic() == 'Daily notes'
     assert window.search_edit.text() == ''
     assert storage.get_topics()['Daily notes'][-1]['key'] == 'New note from live test'
+    check_native_focus('saved')
+    QTest.qWait(1200)
+    check_native_focus('saved after focus-loss timeout')
+    # Send actual X11 keystrokes, rather than directing QTest at a widget.
+    # Only inject after confirming that the disposable Notes host owns focus.
+    subprocess.run(['xdotool', 'key', 'slash'], check=True)
+    QTest.qWait(100)
+    assert window.search_edit.hasFocus()
+    check_native_focus('before real typing')
+    subprocess.run(['xdotool', 'type', '--clearmodifiers', 'New note from live test'], check=True)
+    QTest.qWait(100)
+    assert window.search_edit.text() == 'New note from live test'
+    window.search_edit.clear()
     capture('new-note-saved')
     before = storage.get_topics()
+    mnemonic_dialogs = []
     def cancel_selected_topic_note():
         dialog = app.activeModalWidget()
         assert isinstance(dialog, EntryDialog)
         assert dialog.topic_combo.currentText() == 'Daily notes'
+        mnemonic_dialogs.append(True)
         assert dialog.grab().save(str(output / 'new-note-selected-topic.png'))
         dialog.reject()
     QTimer.singleShot(250, cancel_selected_topic_note)
-    window.new_note_btn.click()
+    subprocess.run(['xdotool', 'key', 'alt+n'], check=True)
+    QTest.qWait(500)
+    assert mnemonic_dialogs == [True]
     assert storage.get_topics() == before
+    check_native_focus('cancelled')
+    QTest.qWait(1200)
+    check_native_focus('cancelled after focus-loss timeout')
+    (output / 'focus-checks.json').write_text(json.dumps(focus_checks, indent=2))
     window.close()
     QTest.qWait(100)
     background.close()

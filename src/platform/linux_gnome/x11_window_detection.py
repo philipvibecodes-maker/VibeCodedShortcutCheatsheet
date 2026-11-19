@@ -175,3 +175,13 @@ def get_focused_app_name() -> Optional[str]:
     """Return the focused window's wm_class, or None."""
     focused = get_focused_window()
     return focused["wm_class"] if focused else None
+
+
+def restore_keyboard_focus(window_id: int) -> None:
+    """Restore input to a mapped Qt window after an override-redirect dialog."""
+    _lib.XSetInputFocus.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+    _lib.XSetInputFocus.restype = ctypes.c_int
+    _lib.XFlush.argtypes = [ctypes.c_void_p]
+    display = _xdisplay()
+    _lib.XSetInputFocus(display, window_id, 1, 0)  # RevertToPointerRoot, CurrentTime
+    _lib.XFlush(display)

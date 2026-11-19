@@ -381,3 +381,55 @@ def test_new_note_empty_library_and_readonly_validation(qtbot, tmp_path, monkeyp
     dialog.topic_combo.setCurrentText('')
     dialog._on_save()
     assert dialog.error_label.text() == 'Enter a topic.'
+
+
+@pytest.mark.parametrize('strategy', ['fade', 'palette'])
+@pytest.mark.parametrize('accept', [True, False])
+def test_modal_return_restores_table_focus_after_cleanup(notes, qtbot, strategy, accept):
+    from PyQt6.QtCore import QTimer
+    notes.close()
+    storage.save_notes_animation_strategy(strategy)
+    storage.save_notes_fade_in_duration_ms(180)
+    notes.show()
+    def finish():
+        dialog = QApplication.activeModalWidget()
+        assert dialog is not None
+        if accept:
+            dialog.key_edit.setText('Focus regression')
+            dialog.value_edit.setPlainText('value')
+            dialog._on_save()
+        else:
+            dialog.reject()
+    QTimer.singleShot(30, finish)
+    notes.new_note_btn.click()
+    qtbot.waitUntil(lambda: notes.table.hasFocus())
+    qtbot.wait(1200)
+    assert notes.isVisible()
+    assert notes.table.hasFocus()
+    assert notes.window().isActiveWindow()
+    assert notes._modal_depth == 0
+    assert not notes._dialog_focus_timer.isActive()
+
+
+def test_queued_focus_return_does_not_reopen_hidden_notes(notes):
+    notes._dialog_focus_timer.start(0)
+    notes.close()
+    assert not notes._dialog_focus_timer.isActive()
+    notes._restore_dialog_focus()
+    assert not notes.isVisible()
+
+
+def test_new_note_mnemonic_and_settings_menu_do_not_conflict(notes, qtbot):
+    from PyQt6.QtCore import QTimer
+    seen = []
+    assert notes.new_note_btn.text() == 'New &note'
+    assert notes.menuBar().actions()[0].text() == '&Settings'
+    def cancel():
+        dialog = QApplication.activeModalWidget()
+        assert dialog is not None and dialog.windowTitle() == 'New note'
+        seen.append(True)
+        dialog.reject()
+    QTimer.singleShot(250, cancel)
+    qtbot.keyClick(notes, Qt.Key.Key_N, Qt.KeyboardModifier.AltModifier)
+    qtbot.waitUntil(lambda: bool(seen))
+    assert notes.isVisible()

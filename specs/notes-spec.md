@@ -112,3 +112,17 @@ The application has a notes window, separate from the cheatsheet window, that wi
   result's topic is still prefilled so its origin remains explicit. Cancel changes nothing.
 - After saving, clear search and show/select the new note in its destination topic. Resume
   native-app interaction checks and screenshot review with disposable sample data.
+
+## Revision 20 — restore real keyboard focus after dialogs
+
+- Restore focus after the modal event loop and dialog teardown, not synchronously during
+  dismissal. Raise/activate the actual Notes surface and focus the table (or search if empty).
+  On Qt's xcb backend, explicitly restore X11/XWayland input focus because window-manager
+  activation requests can leave an unmanaged palette host logically active without keyboard focus.
+- Guard focus-loss dismissal during modal dialogs and queued restoration. Cancel queued focus
+  restoration when notes hides; do not reopen hidden windows or use persistent focus retries.
+- Regression checks cover Save/Cancel for fade and palette, native X11 focus after the normal
+  dismissal timeout, and real keyboard input to Notes after saving.
+
+- Revision 20 also assigns Alt+N to the New note button's mnemonic and renames the Notes menu
+  to Settings (Alt+S). Remove the redundant explicit Alt+N shortcut to prevent ambiguity.

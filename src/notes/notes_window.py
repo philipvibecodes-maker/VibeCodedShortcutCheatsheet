@@ -34,7 +34,7 @@ from PyQt6.QtWidgets import (
     QWidgetAction,
 )
 
-from src.platform import get_focused_window
+from src.platform import get_focused_window, restore_keyboard_focus
 from src.notes.backdrop import NotesBackdrop
 from src.data_storage import (
     add_topic,
@@ -455,6 +455,10 @@ class NotesWindow(QMainWindow):
         self.setStyleSheet(DARK_THEME)
         self._font_size = get_notes_font_size()
         self._active_editor = None
+        self._modal_depth = 0
+        self._dialog_focus_timer = QTimer(self)
+        self._dialog_focus_timer.setSingleShot(True)
+        self._dialog_focus_timer.timeout.connect(self._restore_dialog_focus)
         self._session_size = None
         self._preparing_opening = False
 
@@ -467,7 +471,7 @@ class NotesWindow(QMainWindow):
         self._notes_menu_bar = QMenuBar(chrome)
         chrome_layout.addWidget(self._notes_menu_bar)
         self.setMenuWidget(chrome)
-        notes_menu = self.menuBar().addMenu("&Notes")
+        notes_menu = self.menuBar().addMenu("&Settings")
         strategy_menu = notes_menu.addMenu("&Animation")
         strategy_group = QActionGroup(self)
         self._strategy_group = strategy_group
@@ -627,7 +631,7 @@ class NotesWindow(QMainWindow):
         self.new_topic_btn = QPushButton("New &topic")
         self.new_topic_btn.clicked.connect(self._new_topic)
         buttons.addWidget(self.new_topic_btn)
-        self.new_note_btn = QPushButton("New note")
+        self.new_note_btn = QPushButton("New &note")
         self.new_note_btn.clicked.connect(self._new_entry)
         buttons.addWidget(self.new_note_btn)
         buttons.addStretch()
@@ -647,7 +651,6 @@ class NotesWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl++"), self, activated=lambda: self._change_font_size(1))
         QShortcut(QKeySequence("Ctrl+-"), self, activated=lambda: self._change_font_size(-1))
         QShortcut(QKeySequence("Ctrl+T"), self, activated=self._new_topic)
-        QShortcut(QKeySequence("Alt+N"), self, activated=self._new_entry)
         QShortcut(QKeySequence("Alt+I"), self, activated=self._edit_entry)
         QShortcut(QKeySequence("Alt+D"), self, activated=self._delete_topic)
         QShortcut(QKeySequence("Ctrl+N"), self, activated=self._new_entry)
@@ -871,15 +874,31 @@ class NotesWindow(QMainWindow):
         center = self.mapToGlobal(self.rect().center())
         dialog.move(center.x() - dialog.width() // 2,
                     center.y() - dialog.height() // 2)
-        dialog.show()
-        dialog.move(dialog.pos() + center - dialog.frameGeometry().center())
-        dialog.raise_()
-        dialog.activateWindow()
-        result = dialog.exec()
-        if self.isVisible():
-            self.raise_()
-            self.window().activateWindow()
-        return result
+        self._modal_depth += 1
+        try:
+            dialog.show()
+            dialog.move(dialog.pos() + center - dialog.frameGeometry().center())
+            dialog.raise_()
+            dialog.activateWindow()
+            return dialog.exec()
+        finally:
+            self._modal_depth -= 1
+            # Wait until the dialog is hidden/deleted and Qt's modal state has
+            # unwound. Activating here synchronously races native focus cleanup.
+            if self.isVisible() and not self._modal_depth:
+                self._dialog_focus_timer.start(0)
+
+    def _restore_dialog_focus(self):
+        if not self.isVisible() or self._modal_depth or QApplication.activeModalWidget():
+            return
+        surface = self.window()
+        surface.raise_()
+        surface.activateWindow()
+        if QApplication.platformName() == "xcb":
+            # Unmanaged X11 hosts are ignored by WM activation requests. Qt
+            # can report them active while actual keyboard input goes elsewhere.
+            restore_keyboard_focus(int(surface.winId()))
+        (self.table if self.table.rowCount() else self.search_edit).setFocus()
 
     def _new_topic(self):
         if not self._commit_editor():
@@ -1366,6 +1385,7 @@ class NotesWindow(QMainWindow):
         super().closeEvent(event)
 
     def hideEvent(self, event):
+        self._dialog_focus_timer.stop()
         if self._slide_handoff:
             super().hideEvent(event)
             return
@@ -1390,7 +1410,8 @@ class NotesWindow(QMainWindow):
         transitions, so the OS-level focused window is the source of truth:
         if it still reports our title, we're mid-transition — do nothing.
         """
-        if self._active_editor or self.isActiveWindow() or QApplication.activeWindow() is not None:
+        if (self._modal_depth or self._dialog_focus_timer.isActive() or self._active_editor
+                or self.isActiveWindow() or QApplication.activeWindow() is not None):
             return
         try:
             focused = get_focused_window()
